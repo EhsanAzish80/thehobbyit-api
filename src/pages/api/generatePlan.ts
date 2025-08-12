@@ -7,6 +7,16 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 type Level = "Beginner" | "Intermediate" | "Advanced";
 
+// Normalize level to match enum format
+const normalizedLevel =
+  typeof level === "string"
+    ? level.charAt(0).toUpperCase() + level.slice(1).toLowerCase()
+    : "";
+
+if (!["Beginner", "Intermediate", "Advanced"].includes(normalizedLevel)) {
+  return res.status(400).json({ error: "Invalid level" });
+}
+
 function sanitizeLines(text: string): string[] {
   if (!text) return [];
   const raw = text.replace(/```+/g, "").replace(/\r/g, "").trim();
@@ -52,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const prompt = `
 You are a concise, motivational coach generating learning plans.
 Target language (BCP-47): ${languageCode}
-Learner level: ${level}
+Learner level: ${normalizedLevel}
 Time available: ${weeklyMinutes} minutes per week
 Hobby: ${hobby}
 
