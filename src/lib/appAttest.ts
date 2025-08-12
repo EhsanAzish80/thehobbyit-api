@@ -222,11 +222,11 @@ export async function verifyAppAttest({
   // ✅ Robustly obtain a WebCrypto CryptoKey from the leaf
   const verifyKey = await toCryptoKeyFromLeaf(leaf);
 
-  const ok = await subtle.verify(
+    const ok = await subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     verifyKey,
-    sigRaw.buffer,       // <- Ensure ArrayBuffer
-    verifyData.buffer    // <- Ensure ArrayBuffer
+    sigRaw.slice().buffer,    // ensure plain ArrayBuffer
+    verifyData.slice().buffer // ensure plain ArrayBuffer
   );
   if (!ok) throw new Error("Invalid attestation signature");
 
