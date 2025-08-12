@@ -114,8 +114,8 @@ const Home: NextPage = () => {
 
   const ready = sceneW > 0 && sceneH > 0;
 
-  const avatarW = Math.min(sceneW * 0.2, 200); // bigger avatar
-  const roadY = sceneH * 0.65;
+  const avatarW = Math.min(sceneW * 0.25, 200); // bigger avatar
+  const roadY = sceneH * 0.62;
   const backRowY = sceneH * 0.60;
   const frontRowY = sceneH * 0.76;
 
