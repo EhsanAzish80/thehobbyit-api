@@ -1,9 +1,9 @@
+// src/pages/api/generatePlan.ts
 import type { NextApiRequest, NextApiResponse } from "next";
 import OpenAI from "openai";
+import { verifyToken } from "../../lib/hmac";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-type Level = "Beginner" | "Intermediate" | "Advanced";
 
 function sanitizeLines(text: string): string[] {
   if (!text) return [];
@@ -25,18 +25,47 @@ function sanitizeLines(text: string): string[] {
     lines = lines.slice(0, 52);
   } else if (lines.length < 52) {
     lines = lines.concat(
-      Array(52 - lines.length).fill(
-        "Practice for 20 minutes and review last week."
-      )
+      Array(52 - lines.length).fill("Practice for 20 minutes and review last week.")
     );
   }
 
   return lines;
 }
 
+function pickOutputText(resp: any): string {
+  // Prefer the unified helper when available
+  if (typeof resp?.output_text === "string" && resp.output_text.length > 0) {
+    return resp.output_text;
+  }
+  // Fallbacks for different SDK shapes
+  const text0 = resp?.output?.[0]?.content?.[0]?.text;
+  if (typeof text0 === "string" && text0.length > 0) return text0;
+
+  const choice = resp?.choices?.[0]?.message?.content;
+  if (typeof choice === "string" && choice.length > 0) return choice;
+
+  return "";
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // --- Require short-lived HMAC token ---
+  const token = (req.headers["x-client-token"] as string) || "";
+  if (!token) return res.status(401).json({ error: "Missing token" });
+
+  try {
+    const claims = verifyToken(token, {
+      ua: req.headers["user-agent"] as string,
+      ip: ((req.headers["x-forwarded-for"] as string) || "").split(",")[0].trim(),
+    });
+    if (claims.aud !== "generatePlan") {
+      return res.status(403).json({ error: "Invalid audience" });
+    }
+  } catch (e: any) {
+    return res.status(401).json({ error: "Invalid or expired token" });
   }
 
   const { hobby, level, minutes, languageCode } = req.body ?? {};
@@ -80,19 +109,20 @@ STRICT OUTPUT FORMAT:
     const response = await client.responses.create({
       model: "gpt-5-mini",
       input: prompt,
-      temperature: 0.7,
-      max_output_tokens: 1200
+      // temperature: 0.7, // sometimes unsupported on specific snapshots; omit to be safe
+      max_output_tokens: 1600, // a bit higher to avoid truncation
+      // You can also set: reasoning: { effort: "low" },
+      // and: text: { format: { type: "text" } },
     });
 
-    const text =
-      (response.output?.[0] as any)?.content?.[0]?.text ??
-      (response as any)?.output_text ??
-      (response as any)?.choices?.[0]?.message?.content ??
-      "";
+    const text = pickOutputText(response);
+    if (!text) {
+      // If incomplete due to token cap, you’ll see it here:
+      console.warn("Model returned empty text or hit token limit:", JSON.stringify(response?.incomplete_details ?? {}, null, 2));
+    }
 
     let plan = sanitizeLines(text);
-
-    // Force "Week X:" prefix
+    // Add "Week X:" prefix on our side
     plan = plan.map((line, i) => `Week ${i + 1}: ${line}`);
 
     return res.status(200).json({ plan });
