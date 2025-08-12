@@ -6,8 +6,8 @@ import { X509Certificate, cryptoProvider } from "@peculiar/x509";
 import { Crypto } from "@peculiar/webcrypto"; // polyfill WebCrypto in Node
 import { APPLE_APP_ATTEST_ROOT_PEM } from "./appleRoots";
 
-// Hook Node’s crypto into @peculiar/x509
-setEngine("NodeCrypto", webcrypto as unknown as CryptoEngine);
+// Point @peculiar/x509 at a WebCrypto engine
+cryptoProvider.set(new Crypto());
 
 // Helpers
 function b64toBuf(b64: string): Uint8Array {
