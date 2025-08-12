@@ -202,34 +202,52 @@ export async function verifyAppAttest({
     throw new Error("No x5c certificate chain in attestation");
   }
 
-  const chain: X509Certificate[] = x5c.map((b: any, idx: number) => {
-    console.info(`[x5c] Cert[${idx}] raw type:`, typeof b);
-    console.info(`[x5c] Cert[${idx}] constructor:`, b?.constructor?.name);
+  const chain = x5c.map((b: any, idx: number) => {
+  console.info(`[x5c] Cert[${idx}] raw type:`, typeof b);
+  console.info(`[x5c] Cert[${idx}] constructor:`, b?.constructor?.name);
 
-    let bytes: Uint8Array;
-    if (b instanceof Uint8Array) bytes = b;
-    else if (Buffer.isBuffer(b)) bytes = new Uint8Array(b);
-    else if (typeof b === "string") bytes = b64toBuf(b);
-    else if (b && b.constructor === ArrayBuffer) bytes = new Uint8Array(b);
-    else throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
+  let bytes: Uint8Array;
 
-    console.info(`[x5c] Cert[${idx}] length: ${bytes.length}`);
-    console.info(
-      `[x5c] Cert[${idx}] first 16 bytes (hex): ${bufToHex(bytes.slice(0, 16))}`
-    );
+  if (b instanceof Uint8Array) {
+    bytes = b;
+  } else if (b && b.constructor === ArrayBuffer) {
+    bytes = new Uint8Array(b);
+  } else if (b instanceof SharedArrayBuffer) {
+    bytes = new Uint8Array(b);
+  } else if (Buffer.isBuffer(b)) {
+    // Convert Buffer → Uint8Array without keeping Buffer
+    bytes = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  } else if (typeof b === "string") {
+    // Base64 → Uint8Array
+    bytes = Uint8Array.from(Buffer.from(b, "base64"));
+  } else {
+    throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
+  }
 
-    // ✅ No SharedArrayBuffer issue — Buffer.from handles both
-    const derBuf = Buffer.from(bytes);
-    try {
-      const cert = new X509Certificate(derBuf);
-      console.info(`[x5c] Cert[${idx}] subject: ${cert.subject}`);
-      console.info(`[x5c] Cert[${idx}] issuer: ${cert.issuer}`);
-      return cert;
-    } catch (err: any) {
-      console.error(`[x5c] Cert[${idx}] parse failed: ${err.message}`);
-      throw err;
-    }
-  });
+  console.info(`[x5c] Cert[${idx}] length:`, bytes.length);
+  console.info(
+    `[x5c] Cert[${idx}] first 16 bytes (hex):`,
+    Array.from(bytes.slice(0, 16))
+      .map((n) => n.toString(16).padStart(2, "0"))
+      .join(" ")
+  );
+
+  // ✅ Extract plain ArrayBuffer — no Buffer usage
+  const arrBuf: ArrayBuffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  );
+
+  try {
+    const cert = new X509Certificate(arrBuf); // DER as ArrayBuffer
+    console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
+    console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
+    return cert;
+  } catch (err: any) {
+    console.error(`[x5c] Cert[${idx}] parse failed:`, err.message || err);
+    throw err;
+  }
+});
 
   // ✅ Validate certificate chain
   console.info(`[validateChain] Chain length: ${chain.length}`);
