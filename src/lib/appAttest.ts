@@ -270,10 +270,10 @@ export async function verifyAppAttest({
   const verifyKey = await toCryptoKeyFromLeaf(leaf);
 
   const ok = await subtle.verify(
-    { name: "ECDSA", hash: "SHA-256" },
-    verifyKey,
-    sigRaw.buffer,
-    verifyData.buffer
+  { name: "ECDSA", hash: "SHA-256" },
+  verifyKey,
+  sigRaw,       // Uint8Array is fine
+  verifyData    // Uint8Array is fine
   );
   if (!ok) throw new Error("Invalid attestation signature");
 
