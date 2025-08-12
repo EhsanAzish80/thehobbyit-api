@@ -194,8 +194,8 @@ const Home: NextPage = () => {
           style={{
             position: "absolute",
             left: `${avatarX}px`,
-            top: `${roadY}px`,
-            width: `${avatarW}px`,
+            top: `${roadY+20}px`,
+            width: `${avatarW+20}px`,
             zIndex: 3,
             imageRendering: "pixelated",
           }}
