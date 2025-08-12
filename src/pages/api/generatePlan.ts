@@ -7,16 +7,6 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 type Level = "Beginner" | "Intermediate" | "Advanced";
 
-// Normalize level to match enum format
-const normalizedLevel =
-  typeof level === "string"
-    ? level.charAt(0).toUpperCase() + level.slice(1).toLowerCase()
-    : "";
-
-if (!["Beginner", "Intermediate", "Advanced"].includes(normalizedLevel)) {
-  return res.status(400).json({ error: "Invalid level" });
-}
-
 function sanitizeLines(text: string): string[] {
   if (!text) return [];
   const raw = text.replace(/```+/g, "").replace(/\r/g, "").trim();
@@ -30,14 +20,17 @@ function sanitizeLines(text: string): string[] {
 
   if (lines.length > 52) lines = lines.slice(0, 52);
   else if (lines.length < 52) {
-    lines = lines.concat(Array(52 - lines.length).fill("Practice for 20 minutes and review last week."));
+    lines = lines.concat(
+      Array(52 - lines.length).fill("Practice for 20 minutes and review last week.")
+    );
   }
   return lines;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Require our server-issued token
-  const authz = req.headers.authorization || (req.headers["x-client-token"] as string | undefined);
+  const authz =
+    req.headers.authorization || (req.headers["x-client-token"] as string | undefined);
   const token = authz?.startsWith("Bearer ") ? authz.slice(7) : authz;
 
   try {
@@ -48,16 +41,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
   const { hobby, level, minutes, languageCode } = req.body ?? {};
 
-  if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
-  if (typeof hobby !== "string" || hobby.trim().length === 0 || hobby.length > 80) return res.status(400).json({ error: "Invalid hobby" });
-  if (!["Beginner", "Intermediate", "Advanced"].includes(level)) return res.status(400).json({ error: "Invalid level" });
+  // Normalize level so it works regardless of case
+  const normalizedLevel =
+    typeof level === "string"
+      ? level.charAt(0).toUpperCase() + level.slice(1).toLowerCase()
+      : "";
+
+  if (!process.env.OPENAI_API_KEY)
+    return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+  if (
+    typeof hobby !== "string" ||
+    hobby.trim().length === 0 ||
+    hobby.length > 80
+  )
+    return res.status(400).json({ error: "Invalid hobby" });
+  if (!["Beginner", "Intermediate", "Advanced"].includes(normalizedLevel))
+    return res.status(400).json({ error: "Invalid level" });
   const weeklyMinutes = Number(minutes);
-  if (!Number.isFinite(weeklyMinutes) || weeklyMinutes < 15 || weeklyMinutes > 600) return res.status(400).json({ error: "Invalid minutes" });
-  if (typeof languageCode !== "string" || !/^[A-Za-z-]{2,8}$/.test(languageCode)) return res.status(400).json({ error: "Invalid languageCode" });
+  if (
+    !Number.isFinite(weeklyMinutes) ||
+    weeklyMinutes < 15 ||
+    weeklyMinutes > 600
+  )
+    return res.status(400).json({ error: "Invalid minutes" });
+  if (
+    typeof languageCode !== "string" ||
+    !/^[A-Za-z-]{2,8}$/.test(languageCode)
+  )
+    return res.status(400).json({ error: "Invalid languageCode" });
 
   const prompt = `
 You are a concise, motivational coach generating learning plans.
@@ -81,7 +97,7 @@ STRICT OUTPUT FORMAT:
     const response = await client.responses.create({
       model: "gpt-5-mini",
       input: prompt,
-      max_output_tokens: 1200
+      max_output_tokens: 1200,
     });
 
     const text =
