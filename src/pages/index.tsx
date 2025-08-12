@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-// Asset imports (make sure they're inside src/pages/assets or src/assets)
+// Asset imports
 import background from "./assets/background.png";
 import cloud1 from "./assets/cloud1.png";
 import cloud2 from "./assets/cloud2.png";
@@ -25,13 +25,24 @@ const walkingFrames = [
 
 export default function Home() {
   const [frameIndex, setFrameIndex] = useState(0);
-  const [cloudPositions, setCloudPositions] = useState([
-    { x: 50, y: 40, speed: 0.2, img: cloud1.src },
-    { x: 200, y: 80, speed: 0.15, img: cloud2.src },
-    { x: 350, y: 60, speed: 0.25, img: cloud3.src },
-    { x: 500, y: 100, speed: 0.1, img: cloud4.src },
-  ]);
+  const [cloudPositions, setCloudPositions] = useState<
+    { x: number; y: number; speed: number; img: string }[]
+  >([]);
   const [avatarX, setAvatarX] = useState(0);
+  const [screenWidth, setScreenWidth] = useState(0);
+
+  // Initialize positions after window is available
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setScreenWidth(window.innerWidth);
+      setCloudPositions([
+        { x: 50, y: 40, speed: 0.2, img: cloud1.src },
+        { x: 200, y: 80, speed: 0.15, img: cloud2.src },
+        { x: 350, y: 60, speed: 0.25, img: cloud3.src },
+        { x: 500, y: 100, speed: 0.1, img: cloud4.src },
+      ]);
+    }
+  }, []);
 
   // Walking animation
   useEffect(() => {
@@ -43,20 +54,22 @@ export default function Home() {
 
   // Move avatar and clouds
   useEffect(() => {
+    if (screenWidth === 0) return;
+
     const moveInterval = setInterval(() => {
       setAvatarX((prev) => prev + 2);
 
       setCloudPositions((prev) =>
         prev.map((cloud) => {
           let newX = cloud.x - cloud.speed;
-          if (newX < -150) newX = window.innerWidth + 50;
+          if (newX < -150) newX = screenWidth + 50;
           return { ...cloud, x: newX };
         })
       );
     }, 16);
 
     return () => clearInterval(moveInterval);
-  }, []);
+  }, [screenWidth]);
 
   return (
     <div
@@ -99,16 +112,18 @@ export default function Home() {
       ))}
 
       {/* Avatar */}
-      <img
-        src={walkingFrames[frameIndex]}
-        alt="avatar"
-        style={{
-          position: "absolute",
-          bottom: "50px",
-          left: `${avatarX % window.innerWidth}px`,
-          width: "80px",
-        }}
-      />
+      {screenWidth > 0 && (
+        <img
+          src={walkingFrames[frameIndex]}
+          alt="avatar"
+          style={{
+            position: "absolute",
+            bottom: "50px",
+            left: `${avatarX % screenWidth}px`,
+            width: "80px",
+          }}
+        />
+      )}
     </div>
   );
 }
