@@ -208,14 +208,15 @@ export async function verifyAppAttest({
   } else if (b && b.constructor === ArrayBuffer) {
     bytes = new Uint8Array(b);
   } else if (Buffer.isBuffer(b)) {
-    bytes = b;
+    bytes = new Uint8Array(b); // ✅ convert Buffer to Uint8Array
   } else if (typeof b === "string") {
     bytes = Uint8Array.from(Buffer.from(b, "base64"));
   } else {
     throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
   }
 
-  return new X509Certificate(Buffer.from(bytes));
+  // ✅ Pass ArrayBuffer instead of Buffer
+  return new X509Certificate(bytes.buffer);
   });
   
   validateChain(chain);
