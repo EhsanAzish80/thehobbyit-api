@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
-import ReactDOM from "react-dom/client";
+import { useEffect, useState } from "react";
 
-// Asset imports (make sure these are in /public or imported directly)
+// Asset imports (make sure they're inside src/pages/assets or src/assets)
 import background from "./assets/background.png";
 import cloud1 from "./assets/cloud1.png";
 import cloud2 from "./assets/cloud2.png";
@@ -12,26 +11,25 @@ import avatar1w1 from "./assets/avatar1w1.png";
 import avatar1w2 from "./assets/avatar1w2.png";
 import avatar1w3 from "./assets/avatar1w3.png";
 import avatar1w4 from "./assets/avatar1w4.png";
-import avatar1 from "./assets/avatar1.png"; // standing
 import avatar1w5 from "./assets/avatar1w5.png";
 import avatar1w6 from "./assets/avatar1w6.png";
 
 const walkingFrames = [
-  avatar1w1,
-  avatar1w2,
-  avatar1w3,
-  avatar1w4,
-  avatar1w5,
-  avatar1w6,
+  avatar1w1.src,
+  avatar1w2.src,
+  avatar1w3.src,
+  avatar1w4.src,
+  avatar1w5.src,
+  avatar1w6.src,
 ];
 
-const App: React.FC = () => {
+export default function Home() {
   const [frameIndex, setFrameIndex] = useState(0);
   const [cloudPositions, setCloudPositions] = useState([
-    { x: 50, y: 40, speed: 0.2, img: cloud1 },
-    { x: 200, y: 80, speed: 0.15, img: cloud2 },
-    { x: 350, y: 60, speed: 0.25, img: cloud3 },
-    { x: 500, y: 100, speed: 0.1, img: cloud4 },
+    { x: 50, y: 40, speed: 0.2, img: cloud1.src },
+    { x: 200, y: 80, speed: 0.15, img: cloud2.src },
+    { x: 350, y: 60, speed: 0.25, img: cloud3.src },
+    { x: 500, y: 100, speed: 0.1, img: cloud4.src },
   ]);
   const [avatarX, setAvatarX] = useState(0);
 
@@ -39,17 +37,15 @@ const App: React.FC = () => {
   useEffect(() => {
     const frameInterval = setInterval(() => {
       setFrameIndex((prev) => (prev + 1) % walkingFrames.length);
-    }, 150); // change frame every 150ms
+    }, 150);
     return () => clearInterval(frameInterval);
   }, []);
 
   // Move avatar and clouds
   useEffect(() => {
     const moveInterval = setInterval(() => {
-      // Move avatar
-      setAvatarX((prev) => prev + 2); // speed in px
+      setAvatarX((prev) => prev + 2);
 
-      // Move clouds and wrap around
       setCloudPositions((prev) =>
         prev.map((cloud) => {
           let newX = cloud.x - cloud.speed;
@@ -57,7 +53,7 @@ const App: React.FC = () => {
           return { ...cloud, x: newX };
         })
       );
-    }, 16); // ~60fps
+    }, 16);
 
     return () => clearInterval(moveInterval);
   }, []);
@@ -73,7 +69,7 @@ const App: React.FC = () => {
     >
       {/* Background */}
       <img
-        src={background}
+        src={background.src}
         alt="background"
         style={{
           position: "absolute",
@@ -82,6 +78,7 @@ const App: React.FC = () => {
           width: "100%",
           height: "100%",
           objectFit: "cover",
+          zIndex: -1,
         }}
       />
 
@@ -114,13 +111,4 @@ const App: React.FC = () => {
       />
     </div>
   );
-};
-
-// Render to root
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-
-export default App;
+}
