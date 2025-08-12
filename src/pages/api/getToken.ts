@@ -1,66 +1,39 @@
 // src/pages/api/getToken.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import fetch from "node-fetch"; // You may already have it or can use native fetch
 import { signToken } from "../../lib/hmac";
+import { verifyAppAttest } from "../../lib/appAttest";
 
-const APPLE_ATTEST_VERIFY_URL = "https://apple.com/appattest/attestation/v1"; // placeholder — we'll explain below
-const APP_BUNDLE_ID = process.env.APP_BUNDLE_ID!; // your iOS bundle ID
+const APP_BUNDLE_ID = process.env.APP_BUNDLE_ID!; // e.g., "ABCDE12345.com.your.bundle"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  const { keyId, attestationObject, challenge } = req.body || {};
-  if (!keyId || !attestationObject || !challenge) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    // 1️⃣ Send to Apple’s App Attest verification API (requires Apple’s server-side code)
-    // In practice, Apple does NOT have a public HTTP API — you verify locally by:
-    // - Parsing attestationObject
-    // - Checking authenticatorData
-    // - Verifying signature & cert chain matches Apple’s root
-    //
-    // For brevity here, we'll assume you have a verifyAttestation() util that does it
-    const valid = await verifyAttestation({
-      keyId,
-      attestationObject,
-      challenge,
-      expectedAppId: APP_BUNDLE_ID,
-    });
-
-    if (!valid) {
-      return res.status(403).json({ error: "Invalid attestation" });
+    const { keyId, attestationObject, challenge } = req.body || {};
+    if (!keyId || !attestationObject || !challenge) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+    if (!APP_BUNDLE_ID) {
+      return res.status(500).json({ error: "APP_BUNDLE_ID missing" });
     }
 
-    // 2️⃣ If valid, sign a short-lived HMAC token for /api/generatePlan
+    // Verify App Attest attestation
+    const ok = await verifyAppAttest({
+      attestationObjectB64: attestationObject,
+      challengeB64: challenge,
+      expectedAppId: APP_BUNDLE_ID, // TEAMID.BUNDLEID
+    });
+    if (!ok) return res.status(403).json({ error: "Invalid attestation" });
+
+    // Issue short-lived HMAC access token for your protected endpoint
     const token = signToken({
       aud: "generatePlan",
-      exp: Math.floor(Date.now() / 1000) + 60 * 5, // 5 min expiry
+      exp: Math.floor(Date.now() / 1000) + 60 * 5, // 5 minutes
     });
 
     res.status(200).json({ token });
-  } catch (err: any) {
-    console.error("getToken error:", err);
+  } catch (e: any) {
+    console.error("getToken error:", e?.message || e);
     res.status(500).json({ error: "Server error" });
   }
-}
-
-// ⬇️ Example local attestation verification util (placeholder)
-async function verifyAttestation({
-  keyId,
-  attestationObject,
-  challenge,
-  expectedAppId,
-}: {
-  keyId: string;
-  attestationObject: string;
-  challenge: string;
-  expectedAppId: string;
-}): Promise<boolean> {
-  // TODO: Implement full App Attest CBOR/ASN.1 parsing & Apple cert chain validation
-  // For now, return true so flow works — but in production, MUST implement real verification
-  return true;
 }
