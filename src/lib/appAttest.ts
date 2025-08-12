@@ -230,11 +230,11 @@ export async function verifyAppAttest({
       .join(" ")
   );
 
-  // ✅ Always clone into a real ArrayBuffer (fixes SharedArrayBuffer issue)
+  // ✅ Always create a clean ArrayBuffer copy
   const arrBuf: ArrayBuffer = new Uint8Array(bytes).buffer;
 
   try {
-    const cert = new X509Certificate(arrBuf); // Pass pure ArrayBuffer
+    const cert = new X509Certificate(arrBuf); // Pass clean ArrayBuffer
     console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
     console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
     return cert;
