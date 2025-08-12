@@ -272,8 +272,8 @@ export async function verifyAppAttest({
   const ok = await subtle.verify(
   { name: "ECDSA", hash: "SHA-256" },
   verifyKey,
-  sigRaw,       // Uint8Array is fine
-  verifyData    // Uint8Array is fine
+  new Uint8Array(sigRaw),     // explicit BufferSource
+  new Uint8Array(verifyData)  // explicit BufferSource
   );
   if (!ok) throw new Error("Invalid attestation signature");
 
