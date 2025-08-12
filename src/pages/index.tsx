@@ -4,6 +4,7 @@ import type { NextPage } from "next";
 
 // --- Assets (relative to this file) ---
 import background from "./assets/background.png";
+import background from "./assets/Sign.png";
 
 import cloud1 from "./assets/cloud1.png";
 import cloud2 from "./assets/cloud2.png";
@@ -116,16 +117,16 @@ const Home: NextPage = () => {
       );
 
       // trees parallax (front moves more than back)
-      setTrees((prev) =>
-        prev.map((t) => {
-          const layerSpeed =
-            (t.depth === "front" ? 0.9 : 0.5) * Math.max(1, sceneW * 0.002);
-          let newX = t.x - layerSpeed;
-          const wrapW = (t.wPct / 100) * sceneW + 80;
-          if (newX < -wrapW) newX = sceneW + 40;
-          return { ...t, x: newX };
-        })
-      );
+      // setTrees((prev) =>
+      //   prev.map((t) => {
+      //     const layerSpeed =
+      //       (t.depth === "front" ? 0.9 : 0.5) * Math.max(1, sceneW * 0.002);
+      //     let newX = t.x - layerSpeed;
+      //     const wrapW = (t.wPct / 100) * sceneW + 80;
+      //     if (newX < -wrapW) newX = sceneW + 40;
+      //     return { ...t, x: newX };
+      //   })
+      // );
 
       raf.id = requestAnimationFrame(step);
     };
@@ -219,7 +220,7 @@ const Home: NextPage = () => {
           style={{
             position: "absolute",
             left: `${avatarX}px`,
-            top: `${roadY - avatarW}px`,
+            top: `${roadY}px`,
             width: `${avatarW}px`,
             zIndex: 3,
             imageRendering: "pixelated",
@@ -248,20 +249,19 @@ const Home: NextPage = () => {
           ))}
 
       {/* Minimal title (optional) */}
-      <div
+      <img
+        src={sign.src}
+        alt="sign"
         style={{
-          position: "absolute",
-          left: 16,
-          top: 12,
-          fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif",
-          fontWeight: 700,
-          color: "white",
-          textShadow: "0 2px 6px rgba(0,0,0,.35)",
-          letterSpacing: 0.3,
+          position: "fixed",
+          top: "20px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "300px",
+          filter: "drop-shadow(4px 4px 6px rgba(0,0,0,0.5))",
           zIndex: 10,
         }}
-      >
-        HobbyIt
+      />
       </div>
     </div>
   );
