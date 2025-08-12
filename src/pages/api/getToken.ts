@@ -1,4 +1,6 @@
 // src/pages/api/getToken.ts
+// at the top of any pages/api/*.ts that imports appAttest.ts
+export const config = { runtime: "nodejs" };
 import type { NextApiRequest, NextApiResponse } from "next";
 import { signToken } from "../../lib/hmac";
 import { verifyAppAttest } from "../../lib/appAttest";
