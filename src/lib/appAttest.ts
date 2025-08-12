@@ -178,12 +178,14 @@ async function toCryptoKeyFromLeaf(leaf: X509Certificate): Promise<CryptoKey> {
 export async function verifyAppAttest({
   attestationObjectB64,
   challengeB64,
-  expectedAppId, // "<teamID>.<bundleID>"
+  expectedAppId,
 }: {
   attestationObjectB64: string;
   challengeB64: string;
   expectedAppId: string;
 }): Promise<boolean> {
+  console.info(`[Main] Starting App Attest verification`);
+
   const attBuf = b64toBuf(attestationObjectB64);
   const att = cbor.decodeFirstSync(attBuf) as any;
 
@@ -194,65 +196,55 @@ export async function verifyAppAttest({
   const authData = new Uint8Array(att.authData);
   const auth = parseAuthData(authData);
 
-  const x5c: Buffer[] = att.attStmt.x5c;
-  if (!Array.isArray(x5c) || x5c.length === 0) throw new Error("Missing x5c");
-  console.log("x5c raw:", att.attStmt.x5c);
-  console.log("First cert type:", typeof att.attStmt.x5c[0]);
-  console.log("First cert length:", att.attStmt.x5c[0]?.length);
-  
-  const chain = x5c.map((b: any, idx: number) => {
-  let bytes: Uint8Array;
-
-  // Type detection and conversion
-  if (b instanceof Uint8Array) {
-    console.log(`[x5c] Cert[${idx}] type: Uint8Array, length: ${b.length}`);
-    bytes = b;
-  } else if (b && b.constructor === ArrayBuffer) {
-    console.log(`[x5c] Cert[${idx}] type: ArrayBuffer, length: ${(b as ArrayBuffer).byteLength}`);
-    bytes = new Uint8Array(b);
-  } else if (Buffer.isBuffer(b)) {
-    console.log(`[x5c] Cert[${idx}] type: Buffer, length: ${b.length}`);
-    bytes = new Uint8Array(b);
-  } else if (typeof b === "string") {
-    console.log(`[x5c] Cert[${idx}] type: Base64 string, length: ${b.length}`);
-    bytes = Uint8Array.from(Buffer.from(b, "base64"));
-  } else {
-    console.error(`[x5c] Cert[${idx}] Unsupported type: ${typeof b}`, b);
-    throw new Error(`Unsupported cert type in x5c[${idx}]: ${typeof b}`);
+  // ✅ Extract x5c from attestation statement
+  const { x5c } = att.attStmt;
+  if (!Array.isArray(x5c) || x5c.length === 0) {
+    throw new Error("No x5c certificate chain in attestation");
   }
 
-  // Debug: print first few bytes in hex for quick validation
-  const hexPreview = Array.from(bytes.slice(0, 16))
-    .map((n) => n.toString(16).padStart(2, "0"))
-    .join(" ");
-  console.log(`[x5c] Cert[${idx}] first 16 bytes (hex): ${hexPreview}`);
+  const chain: X509Certificate[] = x5c.map((b: any, idx: number) => {
+    console.info(`[x5c] Cert[${idx}] raw type:`, typeof b);
+    console.info(`[x5c] Cert[${idx}] constructor:`, b?.constructor?.name);
 
-  // ✅ Ensure ArrayBuffer is passed to X509Certificate
-const arrBuf = (bytes.buffer as ArrayBuffer).slice(
-  bytes.byteOffset,
-  bytes.byteOffset + bytes.byteLength
-);
+    let bytes: Uint8Array;
+    if (b instanceof Uint8Array) bytes = b;
+    else if (Buffer.isBuffer(b)) bytes = new Uint8Array(b);
+    else if (typeof b === "string") bytes = b64toBuf(b);
+    else if (b && b.constructor === ArrayBuffer) bytes = new Uint8Array(b);
+    else throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
 
-try {
-  return new X509Certificate(arrBuf);
-} catch (err: any) {
-  console.error(`[x5c] Cert[${idx}] failed to parse:`, err.message || err);
-  throw err;
-}
+    console.info(`[x5c] Cert[${idx}] length: ${bytes.length}`);
+    console.info(
+      `[x5c] Cert[${idx}] first 16 bytes (hex): ${bufToHex(bytes.slice(0, 16))}`
+    );
+
+    // ✅ No SharedArrayBuffer issue — Buffer.from handles both
+    const derBuf = Buffer.from(bytes);
+    try {
+      const cert = new X509Certificate(derBuf);
+      console.info(`[x5c] Cert[${idx}] subject: ${cert.subject}`);
+      console.info(`[x5c] Cert[${idx}] issuer: ${cert.issuer}`);
+      return cert;
+    } catch (err: any) {
+      console.error(`[x5c] Cert[${idx}] parse failed: ${err.message}`);
+      throw err;
+    }
   });
-  
+
+  // ✅ Validate certificate chain
+  console.info(`[validateChain] Chain length: ${chain.length}`);
   validateChain(chain);
+
   const leaf = chain[0];
 
-  // Get Apple nonce from cert
+  // ✅ Extract Apple nonce from leaf cert
   const appleNonce = getAppleNonceFromLeaf(leaf);
   if (!appleNonce) throw new Error("Missing Apple nonce extension");
 
-  // --- Try both raw and hashed challenge forms ---
   const challengeBuf = b64toBuf(challengeB64);
   const hashedChallenge = sha256Bytes(challengeBuf);
   const nonceFromHashed = sha256Bytes(concatBytes(authData, hashedChallenge));
-  const nonceFromRaw    = sha256Bytes(concatBytes(authData, challengeBuf));
+  const nonceFromRaw = sha256Bytes(concatBytes(authData, challengeBuf));
 
   let clientDataHash: Uint8Array;
   if (bufToHex(appleNonce) === bufToHex(nonceFromHashed)) {
@@ -263,30 +255,30 @@ try {
     throw new Error("Nonce mismatch");
   }
 
-  // Verify App ID
+  // ✅ Verify App ID
   const appIdHash = sha256Bytes(new TextEncoder().encode(expectedAppId));
   if (bufToHex(appIdHash) !== bufToHex(auth.rpIdHash)) {
     throw new Error("App ID hash mismatch");
   }
 
+  // ✅ Verify attestation signature
   const sigDer: Uint8Array = att.attStmt.sig;
   if (!sigDer) throw new Error("Missing attestation signature");
-  const sigRaw = derToJoseSignature(sigDer); // r||s
 
+  const sigRaw = derToJoseSignature(sigDer);
   const verifyData = concatBytes(authData, clientDataHash);
-
-  // ✅ Robustly obtain a WebCrypto CryptoKey from the leaf
   const verifyKey = await toCryptoKeyFromLeaf(leaf);
 
   const ok = await subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     verifyKey,
-    sigRaw.slice().buffer,    // ensure plain ArrayBuffer
-    verifyData.slice().buffer // ensure plain ArrayBuffer
+    sigRaw.buffer,
+    verifyData.buffer
   );
   if (!ok) throw new Error("Invalid attestation signature");
 
   if ((auth.flags & 0x40) === 0) throw new Error("AT flag not set");
 
+  console.info(`[Main] ✅ App Attest verification succeeded`);
   return true;
 }
