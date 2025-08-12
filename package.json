@@ -12,10 +12,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@noble/hashes": "^1.8.0",
-    "@peculiar/webcrypto": "^1.5.0",
-    "@peculiar/x509": "^1.13.0",
-    "cbor": "^10.0.10",
     "next": "^14.2.31",
     "openai": "^5.12.2",
     "react": "^18.3.1",
