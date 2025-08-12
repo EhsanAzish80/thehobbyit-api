@@ -280,13 +280,17 @@ export async function verifyAppAttest({
   const verifyData = concatBytes(authData, clientDataHash);
   const verifyKey = await toCryptoKeyFromLeaf(leaf);
 
+  // Make plain ArrayBuffers to satisfy BufferSource typing
+  const sigBuf: ArrayBuffer  = toPlainArrayBuffer(sigRaw);
+  const dataBuf: ArrayBuffer = toPlainArrayBuffer(verifyData);
+
   const ok = await subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     verifyKey,
-    sigRaw,      // BufferSource
-    verifyData   // BufferSource
-  );
-  if (!ok) throw new Error("Invalid attestation signature");
+    sigBuf,   // ArrayBuffer
+    dataBuf   // ArrayBuffer
+   );
+   if (!ok) throw new Error("Invalid attestation signature");
 
   if ((auth.flags & 0x40) === 0) throw new Error("AT flag not set");
 
