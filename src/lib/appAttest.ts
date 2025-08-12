@@ -228,17 +228,17 @@ export async function verifyAppAttest({
   console.log(`[x5c] Cert[${idx}] first 16 bytes (hex): ${hexPreview}`);
 
   // ✅ Ensure ArrayBuffer is passed to X509Certificate
-  const arrBuf: ArrayBuffer = bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength
-  );
+const arrBuf = (bytes.buffer as ArrayBuffer).slice(
+  bytes.byteOffset,
+  bytes.byteOffset + bytes.byteLength
+);
 
-  try {
-    return new X509Certificate(arrBuf);
-  } catch (err: any) {
-    console.error(`[x5c] Cert[${idx}] failed to parse:`, err.message || err);
-    throw err;
-  }
+try {
+  return new X509Certificate(arrBuf);
+} catch (err: any) {
+  console.error(`[x5c] Cert[${idx}] failed to parse:`, err.message || err);
+  throw err;
+}
   });
   
   validateChain(chain);
