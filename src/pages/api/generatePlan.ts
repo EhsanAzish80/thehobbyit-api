@@ -21,6 +21,8 @@ function sanitizeLines(text: string): string[] {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  console.log("Incoming body:", req.body);
+  console.log("OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
 
   const { hobby, level, minutes, languageCode } = req.body ?? {};
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
@@ -64,7 +66,7 @@ STRICT OUTPUT FORMAT:
     const plan = sanitizeLines(text);
     return res.status(200).json({ plan });
   } catch (err: any) {
-    console.error("[/api/generatePlan] error:", err?.message || err);
-    return res.status(500).json({ error: "Provider error" });
+    console.error("[/api/generatePlan] error:", err);
+    return res.status(500).json({ error: err.message || "Unknown error" });
   }
 }
