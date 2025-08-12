@@ -202,8 +202,6 @@ export async function verifyAppAttest({
     throw new Error("No x5c certificate chain in attestation");
   }
 
-  import { X509Certificate } from "@peculiar/x509";
-
 const chain = x5c.map((b: any, idx: number) => {
   console.info(`[x5c] Cert[${idx}] constructor:`, b?.constructor?.name);
 
