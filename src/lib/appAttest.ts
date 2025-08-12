@@ -230,14 +230,15 @@ export async function verifyAppAttest({
       .join(" ")
   );
 
-  // ✅ Always create a clean ArrayBuffer copy in *this scope*
-  const arrBuf: ArrayBuffer = bytes.buffer.slice(
+  // ✅ Force-cast to ArrayBuffer before slicing
+  const ab = bytes.buffer as ArrayBuffer;
+  const arrBuf: ArrayBuffer = ab.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength
   );
 
   try {
-    const cert = new X509Certificate(arrBuf); // Pass clean ArrayBuffer
+    const cert = new X509Certificate(arrBuf);
     console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
     console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
     return cert;
