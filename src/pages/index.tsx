@@ -3,25 +3,25 @@ import { useEffect, useRef, useState } from "react";
 import type { NextPage } from "next";
 
 // --- Assets (relative to this file) ---
-import background from "../assets/background.png";
+import background from "./assets/background.png";
 
-import cloud1 from "../assets/cloud1.png";
-import cloud2 from "../assets/cloud2.png";
-import cloud3 from "../assets/cloud3.png";
-import cloud4 from "../assets/cloud4.png";
+import cloud1 from "./assets/cloud1.png";
+import cloud2 from "./assets/cloud2.png";
+import cloud3 from "./assets/cloud3.png";
+import cloud4 from "./assets/cloud4.png";
 
-import avatar1w1 from "../assets/avatar1w1.png";
-import avatar1w2 from "../assets/avatar1w2.png";
-import avatar1w3 from "../assets/avatar1w3.png";
-import avatar1w4 from "../assets/avatar1w4.png";
-import avatar1w5 from "../assets/avatar1w5.png";
-import avatar1w6 from "../assets/avatar1w6.png";
-import avatarStand from "../assets/avatar1.png";
+import avatar1w1 from "./assets/avatar1w1.png";
+import avatar1w2 from "./assets/avatar1w2.png";
+import avatar1w3 from "./assets/avatar1w3.png";
+import avatar1w4 from "./assets/avatar1w4.png";
+import avatar1w5 from "./assets/avatar1w5.png";
+import avatar1w6 from "./assets/avatar1w6.png";
+import avatarStand from "./assets/avatar1.png";
 
-import tree1 from "../assets/tree1.png";
-import tree2 from "../assets/tree2.png";
-import tree3 from "../assets/tree3.png";
-import tree4 from "../assets/tree4.png";
+import tree1 from "./assets/tree1.png";
+import tree2 from "./assets/tree2.png";
+import tree3 from "./assets/tree3.png";
+import tree4 from "./assets/tree4.png";
 
 const walkingFrames = [
   avatar1w1,
