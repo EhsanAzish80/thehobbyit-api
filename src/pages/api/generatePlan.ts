@@ -89,7 +89,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const resp = await client.responses.create({
       model: "gpt-5-mini",
       input: inputText,
-      temperature: 0.3,
       max_output_tokens: 1400,
     });
 
