@@ -114,8 +114,8 @@ const Home: NextPage = () => {
 
   const ready = sceneW > 0 && sceneH > 0;
 
-  const avatarW = Math.min(sceneW * 0.16, 200); // bigger avatar
-  const roadY = sceneH * 0.70;
+  const avatarW = Math.min(sceneW * 0.2, 200); // bigger avatar
+  const roadY = sceneH * 0.65;
   const backRowY = sceneH * 0.60;
   const frontRowY = sceneH * 0.76;
 
@@ -194,8 +194,8 @@ const Home: NextPage = () => {
           style={{
             position: "absolute",
             left: `${avatarX}px`,
-            top: `${roadY-30}px`,
-            width: `${avatarW+40}px`,
+            top: `${roadY}px`,
+            width: `${avatarW}px`,
             zIndex: 3,
             imageRendering: "pixelated",
           }}
