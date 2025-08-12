@@ -4,7 +4,7 @@ import type { NextPage } from "next";
 
 // --- Assets (relative to this file) ---
 import background from "./assets/background.png";
-import background from "./assets/Sign.png";
+import Sign from "./assets/Sign.png";
 
 import cloud1 from "./assets/cloud1.png";
 import cloud2 from "./assets/cloud2.png";
@@ -250,8 +250,8 @@ const Home: NextPage = () => {
 
       {/* Minimal title (optional) */}
       <img
-        src={sign.src}
-        alt="sign"
+        src={Sign.src}
+        alt="Sign"
         style={{
           position: "fixed",
           top: "20px",
