@@ -202,50 +202,38 @@ export async function verifyAppAttest({
     throw new Error("No x5c certificate chain in attestation");
   }
 
-  const chain = x5c.map((b: any, idx: number) => {
-  console.info(`[x5c] Cert[${idx}] raw type:`, typeof b);
+  import { X509Certificate } from "@peculiar/x509";
+
+const chain = x5c.map((b: any, idx: number) => {
   console.info(`[x5c] Cert[${idx}] constructor:`, b?.constructor?.name);
 
   let bytes: Uint8Array;
 
   if (b instanceof Uint8Array) {
     bytes = b;
-  } else if (b && b.constructor === ArrayBuffer) {
+  } else if (Buffer.isBuffer(b)) {
+    bytes = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  } else if (b instanceof ArrayBuffer) {
     bytes = new Uint8Array(b);
   } else if (b instanceof SharedArrayBuffer) {
     bytes = new Uint8Array(b);
-  } else if (Buffer.isBuffer(b)) {
-    bytes = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
   } else if (typeof b === "string") {
+    // Assume Base64
     bytes = Uint8Array.from(Buffer.from(b, "base64"));
   } else {
-    throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
+    throw new Error(`Unsupported cert type: ${typeof b}`);
   }
 
-  console.info(`[x5c] Cert[${idx}] length:`, bytes.length);
-  console.info(
-    `[x5c] Cert[${idx}] first 16 bytes (hex):`,
-    Array.from(bytes.slice(0, 16))
-      .map((n) => n.toString(16).padStart(2, "0"))
-      .join(" ")
-  );
-
-  // ✅ Force-cast to ArrayBuffer before slicing
-  const ab = bytes.buffer as ArrayBuffer;
-  const arrBuf: ArrayBuffer = ab.slice(
+  // ✅ Ensure we pass ArrayBuffer only
+  const arrBuf = bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength
   );
 
-  try {
-    const cert = new X509Certificate(arrBuf);
-    console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
-    console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
-    return cert;
-  } catch (err: any) {
-    console.error(`[x5c] Cert[${idx}] parse failed:`, err.message || err);
-    throw err;
-  }
+  const cert = new X509Certificate(arrBuf);
+  console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
+  console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
+  return cert;
 });
 
   // ✅ Validate certificate chain
