@@ -54,7 +54,6 @@ STRICT OUTPUT FORMAT:
     const response = await client.responses.create({
       model: "gpt-5-mini",
       input: prompt,
-      temperature: 0.7,
       max_output_tokens: 1200
     });
 
