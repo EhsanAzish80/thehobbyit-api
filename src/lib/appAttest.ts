@@ -74,7 +74,7 @@ function parseAuthData(buf: Uint8Array) {
   return { rpIdHash, flags, signCount, aaguid, credId, cosePubKey, raw: buf };
 }
 
-// Apple nonce extension may be OCTETSTRING wrapping another OCTETSTRING.
+// Apple nonce extension may be OCTET STRING wrapping another OCTET STRING.
 function unwrapOctetString(bytes: Uint8Array): Uint8Array {
   if (bytes.length < 2 || bytes[0] !== 0x04) return bytes;
   let len = bytes[1];
@@ -92,6 +92,7 @@ function unwrapOctetString(bytes: Uint8Array): Uint8Array {
 }
 
 function getAppleNonceFromLeaf(leaf: X509Certificate): Uint8Array | null {
+  // note: @peculiar/x509 exposes extension OID on `.type`
   const ext = leaf.extensions.find((e) => (e as any).type === "1.2.840.113635.100.8.2");
   if (!ext) return null;
   const raw = new Uint8Array((ext as any).value as ArrayBuffer);
@@ -118,11 +119,12 @@ function validateChain(chain: X509Certificate[]): void {
   if (!ok) throw new Error("Chain does not validate to Apple root");
 }
 
-// DER → raw (r||s) conversion for ECDSA signatures
+// DER → raw (r||s) conversion for ECDSA signatures (P‑256)
 function derToJoseSignature(der: Uint8Array, size = 32): Uint8Array {
   let offset = 0;
   if (der[offset++] !== 0x30) throw new Error("Invalid DER");
-  offset++; // skip length
+  // DER length (skip; simple parser for common case)
+  offset++;
   if (der[offset++] !== 0x02) throw new Error("Invalid DER");
   let rLen = der[offset++];
   let r = der.slice(offset, offset + rLen);
@@ -139,10 +141,44 @@ function derToJoseSignature(der: Uint8Array, size = 32): Uint8Array {
   return Uint8Array.from([...r, ...s]);
 }
 
+// Convert leaf public key (which may be a CryptoKey or library PublicKey) to a WebCrypto CryptoKey
+async function toCryptoKeyFromLeaf(leaf: X509Certificate): Promise<CryptoKey> {
+  const pk: any = (leaf as any).publicKey;
+
+  // Case 1: already a WebCrypto CryptoKey
+  if (pk && typeof pk.type === "string" && typeof pk.algorithm?.name === "string") {
+    return pk as CryptoKey;
+  }
+
+  // Case 2: @peculiar/x509 PublicKey with export() method
+  if (pk && typeof pk.export === "function") {
+    // Export SPKI bytes and import into WebCrypto
+    // Many versions support `pk.export({ format: "spki" })` returning ArrayBuffer
+    const spki: ArrayBuffer =
+      // try argumented export first
+      (await pk.export({ format: "spki" }).catch(() => null)) ??
+      // fall back to older signature `pk.export("spki")`
+      (await pk.export("spki"));
+
+    if (!spki) throw new Error("Unable to export SPKI from leaf public key");
+
+    const cryptoKey = await subtle.importKey(
+      "spki",
+      spki,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"]
+    );
+    return cryptoKey;
+  }
+
+  throw new Error("Unsupported publicKey type on X509Certificate");
+}
+
 export async function verifyAppAttest({
   attestationObjectB64,
   challengeB64,
-  expectedAppId,
+  expectedAppId, // "<teamID>.<bundleID>"
 }: {
   attestationObjectB64: string;
   challengeB64: string;
@@ -157,6 +193,7 @@ export async function verifyAppAttest({
 
   const authData = new Uint8Array(att.authData);
   const auth = parseAuthData(authData);
+
   const clientDataHash = sha256Bytes(b64toBuf(challengeB64));
   const nonce = sha256Bytes(concatBytes(authData, clientDataHash));
 
@@ -178,22 +215,16 @@ export async function verifyAppAttest({
 
   const sigDer: Uint8Array = att.attStmt.sig;
   if (!sigDer) throw new Error("Missing attestation signature");
-  const sigRaw = derToJoseSignature(sigDer);
+  const sigRaw = derToJoseSignature(sigDer); // r||s
 
   const verifyData = concatBytes(authData, clientDataHash);
 
-  const jwk = await subtle.exportKey("jwk", leaf.publicKey as CryptoKey);
-  const key = await subtle.importKey(
-    "jwk",
-    jwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["verify"]
-  );
+  // ✅ Robustly obtain a WebCrypto CryptoKey from the leaf
+  const verifyKey = await toCryptoKeyFromLeaf(leaf);
 
   const ok = await subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
-    key,
+    verifyKey,
     sigRaw,
     verifyData
   );
