@@ -215,10 +215,8 @@ export async function verifyAppAttest({
   } else if (b instanceof SharedArrayBuffer) {
     bytes = new Uint8Array(b);
   } else if (Buffer.isBuffer(b)) {
-    // Convert Buffer → Uint8Array without keeping Buffer
     bytes = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
   } else if (typeof b === "string") {
-    // Base64 → Uint8Array
     bytes = Uint8Array.from(Buffer.from(b, "base64"));
   } else {
     throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
@@ -231,6 +229,20 @@ export async function verifyAppAttest({
       .map((n) => n.toString(16).padStart(2, "0"))
       .join(" ")
   );
+
+  // ✅ Always clone into a real ArrayBuffer (fixes SharedArrayBuffer issue)
+  const arrBuf: ArrayBuffer = new Uint8Array(bytes).buffer;
+
+  try {
+    const cert = new X509Certificate(arrBuf); // Pass pure ArrayBuffer
+    console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
+    console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
+    return cert;
+  } catch (err: any) {
+    console.error(`[x5c] Cert[${idx}] parse failed:`, err.message || err);
+    throw err;
+  }
+});
 
   // ✅ Extract plain ArrayBuffer — no Buffer usage
   const arrBuf: ArrayBuffer = bytes.buffer.slice(
