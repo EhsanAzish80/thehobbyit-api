@@ -35,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json({ token });
   } catch (e: any) {
-    console.error("getToken error:", e?.message || e);
-    res.status(500).json({ error: "Server error" });
+    console.error("getToken error:", e);
+    res.status(500).json({ error: e?.message || String(e) || "Server error" });
   }
 }
