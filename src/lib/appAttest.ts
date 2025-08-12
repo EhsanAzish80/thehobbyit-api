@@ -194,9 +194,6 @@ export async function verifyAppAttest({
   const authData = new Uint8Array(att.authData);
   const auth = parseAuthData(authData);
 
-  const clientDataHash = sha256Bytes(b64toBuf(challengeB64));
-  const nonce = sha256Bytes(concatBytes(authData, clientDataHash));
-
   const x5c: Buffer[] = att.attStmt.x5c;
   if (!Array.isArray(x5c) || x5c.length === 0) throw new Error("Missing x5c");
   const chain = x5c.map((b) => new X509Certificate(Buffer.from(b)));
@@ -204,16 +201,32 @@ export async function verifyAppAttest({
   validateChain(chain);
   const leaf = chain[0];
 
+  // Get Apple nonce from cert
   const appleNonce = getAppleNonceFromLeaf(leaf);
   if (!appleNonce) throw new Error("Missing Apple nonce extension");
-  if (bufToHex(appleNonce) !== bufToHex(nonce)) throw new Error("Nonce mismatch");
 
+  // --- Try both raw and hashed challenge forms ---
+  const challengeBuf = b64toBuf(challengeB64);
+  const hashedChallenge = sha256Bytes(challengeBuf);
+  const nonceFromHashed = sha256Bytes(concatBytes(authData, hashedChallenge));
+  const nonceFromRaw    = sha256Bytes(concatBytes(authData, challengeBuf));
+
+  let clientDataHash: Uint8Array;
+  if (bufToHex(appleNonce) === bufToHex(nonceFromHashed)) {
+    clientDataHash = hashedChallenge;
+  } else if (bufToHex(appleNonce) === bufToHex(nonceFromRaw)) {
+    clientDataHash = challengeBuf;
+  } else {
+    throw new Error("Nonce mismatch");
+  }
+
+  // Verify App ID
   const appIdHash = sha256Bytes(new TextEncoder().encode(expectedAppId));
   if (bufToHex(appIdHash) !== bufToHex(auth.rpIdHash)) {
     throw new Error("App ID hash mismatch");
   }
 
-    const sigDer: Uint8Array = att.attStmt.sig;
+  const sigDer: Uint8Array = att.attStmt.sig;
   if (!sigDer) throw new Error("Missing attestation signature");
   const sigRaw = derToJoseSignature(sigDer); // r||s
 
@@ -222,7 +235,7 @@ export async function verifyAppAttest({
   // ✅ Robustly obtain a WebCrypto CryptoKey from the leaf
   const verifyKey = await toCryptoKeyFromLeaf(leaf);
 
-    const ok = await subtle.verify(
+  const ok = await subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     verifyKey,
     sigRaw.slice().buffer,    // ensure plain ArrayBuffer
