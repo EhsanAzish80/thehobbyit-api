@@ -4,7 +4,9 @@ import { sha256 } from "@noble/hashes/sha256";
 import { X509Certificate, cryptoProvider } from "@peculiar/x509";
 import { APPLE_APP_ATTEST_ROOT_PEM } from "./appleRoots";
 
-// --- WebCrypto wiring (prefer native, fallback to @peculiar/webcrypto) ---
+/* -------------------------------------------
+   WebCrypto wiring (prefer native if available)
+-------------------------------------------- */
 let subtle: SubtleCrypto;
 (function initCryptoProvider() {
   const nativeCrypto = (globalThis as any)?.crypto;
@@ -12,6 +14,7 @@ let subtle: SubtleCrypto;
     cryptoProvider.set(nativeCrypto);
     subtle = nativeCrypto.subtle;
   } else {
+    // Node polyfill
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { Crypto } = require("@peculiar/webcrypto");
     const nodeCrypto = new Crypto();
@@ -20,7 +23,7 @@ let subtle: SubtleCrypto;
   }
 })();
 
-// ---------- Helpers ----------
+/* --------------- Helpers ----------------- */
 function b64toBuf(b64: string): Uint8Array {
   return Uint8Array.from(Buffer.from(b64, "base64"));
 }
@@ -92,7 +95,7 @@ function unwrapOctetString(bytes: Uint8Array): Uint8Array {
 }
 
 function getAppleNonceFromLeaf(leaf: X509Certificate): Uint8Array | null {
-  // note: @peculiar/x509 exposes extension OID on `.type`
+  // @peculiar/x509 exposes extension OID on `.type`
   const ext = leaf.extensions.find((e) => (e as any).type === "1.2.840.113635.100.8.2");
   if (!ext) return null;
   const raw = new Uint8Array((ext as any).value as ArrayBuffer);
@@ -123,8 +126,8 @@ function validateChain(chain: X509Certificate[]): void {
 function derToJoseSignature(der: Uint8Array, size = 32): Uint8Array {
   let offset = 0;
   if (der[offset++] !== 0x30) throw new Error("Invalid DER");
-  // DER length (skip; simple parser for common case)
-  offset++;
+  // Skip total length (assume short form or one-byte long form)
+  const lenByte = der[offset++];
   if (der[offset++] !== 0x02) throw new Error("Invalid DER");
   let rLen = der[offset++];
   let r = der.slice(offset, offset + rLen);
@@ -133,12 +136,39 @@ function derToJoseSignature(der: Uint8Array, size = 32): Uint8Array {
   let sLen = der[offset++];
   let s = der.slice(offset, offset + sLen);
 
+  // Trim leading zeros / left-pad to fixed size
   if (r.length > size) r = r.slice(r.length - size);
   if (s.length > size) s = s.slice(s.length - size);
   if (r.length < size) r = Uint8Array.from([...new Uint8Array(size - r.length), ...r]);
   if (s.length < size) s = Uint8Array.from([...new Uint8Array(size - s.length), ...s]);
 
   return Uint8Array.from([...r, ...s]);
+}
+
+// Convert a variety of x5c element shapes into a clean DER Uint8Array (copy)
+function toDerUint8(b: any): Uint8Array {
+  if (b instanceof Uint8Array) {
+    // copy to detach from possible SharedArrayBuffer views
+    const out = new Uint8Array(b.length);
+    out.set(b);
+    return out;
+  }
+  // Node Buffer
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(b)) {
+    const view = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+    const out = new Uint8Array(view.length);
+    out.set(view);
+    return out;
+  }
+  // ArrayBuffer
+  if (typeof b === "object" && b && b.constructor === ArrayBuffer) {
+    return new Uint8Array(b as ArrayBuffer);
+  }
+  // Base64 string
+  if (typeof b === "string") {
+    return Uint8Array.from(Buffer.from(b, "base64"));
+  }
+  throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
 }
 
 // Convert leaf public key (which may be a CryptoKey or library PublicKey) to a WebCrypto CryptoKey
@@ -152,12 +182,9 @@ async function toCryptoKeyFromLeaf(leaf: X509Certificate): Promise<CryptoKey> {
 
   // Case 2: @peculiar/x509 PublicKey with export() method
   if (pk && typeof pk.export === "function") {
-    // Export SPKI bytes and import into WebCrypto
-    // Many versions support `pk.export({ format: "spki" })` returning ArrayBuffer
+    // Try modern signature first; fall back to legacy
     const spki: ArrayBuffer =
-      // try argumented export first
       (await pk.export({ format: "spki" }).catch(() => null)) ??
-      // fall back to older signature `pk.export("spki")`
       (await pk.export("spki"));
 
     if (!spki) throw new Error("Unable to export SPKI from leaf public key");
@@ -175,10 +202,11 @@ async function toCryptoKeyFromLeaf(leaf: X509Certificate): Promise<CryptoKey> {
   throw new Error("Unsupported publicKey type on X509Certificate");
 }
 
+/* ------------------ Main verify ------------------ */
 export async function verifyAppAttest({
   attestationObjectB64,
   challengeB64,
-  expectedAppId,
+  expectedAppId, // "<TEAMID>.<BUNDLEID>"
 }: {
   attestationObjectB64: string;
   challengeB64: string;
@@ -186,6 +214,7 @@ export async function verifyAppAttest({
 }): Promise<boolean> {
   console.info(`[Main] Starting App Attest verification`);
 
+  // Decode attestation
   const attBuf = b64toBuf(attestationObjectB64);
   const att = cbor.decodeFirstSync(attBuf) as any;
 
@@ -193,57 +222,43 @@ export async function verifyAppAttest({
     throw new Error(`Unexpected fmt: ${att.fmt}`);
   }
 
+  // Parse authData
   const authData = new Uint8Array(att.authData);
   const auth = parseAuthData(authData);
 
-  // ✅ Extract x5c from attestation statement
-  const { x5c } = att.attStmt;
+  // Extract x5c
+  const x5c: any[] = att.attStmt?.x5c;
   if (!Array.isArray(x5c) || x5c.length === 0) {
     throw new Error("No x5c certificate chain in attestation");
   }
 
-const chain = x5c.map((b: any, idx: number) => {
-  console.info(`[x5c] Cert[${idx}] constructor:`, b?.constructor?.name);
+  console.info(`[x5c] entries: ${x5c.length}`);
+  // Normalize each cert -> DER Uint8Array and build X509Certificate
+  const chain = x5c.map((b: any, idx: number) => {
+    console.info(`[x5c] Cert[${idx}] typeof: ${typeof b} ctor: ${b?.constructor?.name}`);
+    const der = toDerUint8(b);
+    console.info(
+      `[x5c] Cert[${idx}] length=${der.length} first16=${Array.from(der.slice(0, 16))
+        .map((n) => n.toString(16).padStart(2, "0"))
+        .join(" ")}`
+    );
+    const cert = new X509Certificate(der); // Uint8Array BufferSource
+    console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
+    console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
+    return cert;
+  });
 
-  let bytes: Uint8Array;
-
-  if (b instanceof Uint8Array) {
-    bytes = b;
-  } else if (Buffer.isBuffer(b)) {
-    bytes = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-  } else if (b instanceof ArrayBuffer) {
-    bytes = new Uint8Array(b);
-  } else if (b instanceof SharedArrayBuffer) {
-    bytes = new Uint8Array(b);
-  } else if (typeof b === "string") {
-    // Assume Base64
-    bytes = Uint8Array.from(Buffer.from(b, "base64"));
-  } else {
-    throw new Error(`Unsupported cert type: ${typeof b}`);
-  }
-
-  // ✅ Ensure we pass ArrayBuffer only
-  const arrBuf = bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength
-  );
-
-  const cert = new X509Certificate(arrBuf);
-  console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
-  console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
-  return cert;
-});
-
-  // ✅ Validate certificate chain
-  console.info(`[validateChain] Chain length: ${chain.length}`);
+  // Validate chain
+  console.info(`[validateChain] length=${chain.length}`);
   validateChain(chain);
 
   const leaf = chain[0];
 
-  // ✅ Extract Apple nonce from leaf cert
+  // Nonce from cert
   const appleNonce = getAppleNonceFromLeaf(leaf);
   if (!appleNonce) throw new Error("Missing Apple nonce extension");
 
+  // Try both raw and hashed challenge forms
   const challengeBuf = b64toBuf(challengeB64);
   const hashedChallenge = sha256Bytes(challengeBuf);
   const nonceFromHashed = sha256Bytes(concatBytes(authData, hashedChallenge));
@@ -258,28 +273,29 @@ const chain = x5c.map((b: any, idx: number) => {
     throw new Error("Nonce mismatch");
   }
 
-  // ✅ Verify App ID
+  // Verify App ID binding
   const appIdHash = sha256Bytes(new TextEncoder().encode(expectedAppId));
   if (bufToHex(appIdHash) !== bufToHex(auth.rpIdHash)) {
     throw new Error("App ID hash mismatch");
   }
 
-  // ✅ Verify attestation signature
+  // Verify attestation signature (ECDSA over authData || clientDataHash)
   const sigDer: Uint8Array = att.attStmt.sig;
   if (!sigDer) throw new Error("Missing attestation signature");
 
-  const sigRaw = derToJoseSignature(sigDer);
+  const sigRaw = derToJoseSignature(sigDer); // r||s
   const verifyData = concatBytes(authData, clientDataHash);
   const verifyKey = await toCryptoKeyFromLeaf(leaf);
 
   const ok = await subtle.verify(
-  { name: "ECDSA", hash: "SHA-256" },
-  verifyKey,
-  new Uint8Array(sigRaw),     // explicit BufferSource
-  new Uint8Array(verifyData)  // explicit BufferSource
+    { name: "ECDSA", hash: "SHA-256" },
+    verifyKey,
+    sigRaw,      // Uint8Array (BufferSource)
+    verifyData   // Uint8Array (BufferSource)
   );
   if (!ok) throw new Error("Invalid attestation signature");
 
+  // AT flag must be set
   if ((auth.flags & 0x40) === 0) throw new Error("AT flag not set");
 
   console.info(`[Main] ✅ App Attest verification succeeded`);
