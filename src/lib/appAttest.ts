@@ -221,30 +221,42 @@ export async function verifyAppAttest({
   const authData = new Uint8Array(att.authData);
   const auth = parseAuthData(authData);
 
-  const x5c: any[] = att.attStmt?.x5c;
-  if (!Array.isArray(x5c) || x5c.length === 0) {
-    throw new Error("No x5c certificate chain in attestation");
-  }
+   function derToPEM(der: Uint8Array): string {
+  const b64 = Buffer.from(der).toString("base64");
+  const lines = b64.match(/.{1,64}/g)?.join("\n") ?? b64;
+  return `-----BEGIN CERTIFICATE-----\n${lines}\n-----END CERTIFICATE-----`;
+}
+
+  const { x5c } = att.attStmt;
+if (!Array.isArray(x5c) || x5c.length === 0) {
+  throw new Error("No x5c certificate chain in attestation");
+}
 
   console.info(`[x5c] entries: ${x5c.length}`);
 
   const chain = x5c.map((b: any, idx: number) => {
-    console.info(`[x5c] Cert[${idx}] typeof: ${typeof b} ctor: ${b?.constructor?.name}`);
-    const der = toDerUint8(b);
-    console.info(
-      `[x5c] Cert[${idx}] length=${der.length} first16=${Array.from(der.slice(0, 16))
-        .map((n) => n.toString(16).padStart(2, "0"))
-        .join(" ")}`
-    );
+  // Normalize to Uint8Array of DER
+  let der: Uint8Array;
+  if (b instanceof Uint8Array) {
+    der = b;
+  } else if (Buffer.isBuffer(b)) {
+    der = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  } else if (b instanceof ArrayBuffer) {
+    der = new Uint8Array(b);
+  } else if (typeof b === "string") {
+    // Some platforms hand x5c as base64 strings
+    der = Uint8Array.from(Buffer.from(b, "base64"));
+  } else {
+    throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
+  }
 
-    // 🔧 Give @peculiar/x509 a plain ArrayBuffer to satisfy the types.
-    const arrBuf: ArrayBuffer = toPlainArrayBuffer(der);
-    const cert = new X509Certificate(arrBuf);
-
-    console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
-    console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
-    return cert;
-  });
+  // Convert to PEM and construct
+  const pem = derToPEM(der);
+  const cert = new X509Certificate(pem);
+  console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
+  console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
+  return cert;
+});
 
   console.info(`[validateChain] length=${chain.length}`);
   validateChain(chain);
