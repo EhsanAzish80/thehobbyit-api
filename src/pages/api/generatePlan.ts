@@ -5,32 +5,9 @@ import { verifyToken } from "../../lib/hmac";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-type Level = "Beginner" | "Intermediate" | "Advanced";
-
-function sanitizeLines(text: string): string[] {
-  if (!text) return [];
-  const raw = text.replace(/```+/g, "").replace(/\r/g, "").trim();
-
-  let lines = raw.split("\n").map(s => s.trim()).filter(Boolean);
-  if (lines.length < 52) {
-    const paras = raw.split(/\n\s*\n/g).map(s => s.trim()).filter(Boolean);
-    if (paras.length > lines.length) lines = paras;
-  }
-  lines = lines.map(l => l.replace(/^[-*•\d."]+\s*/, "").trim());
-
-  if (lines.length > 52) lines = lines.slice(0, 52);
-  else if (lines.length < 52) {
-    lines = lines.concat(
-      Array(52 - lines.length).fill("Practice for 20 minutes and review last week.")
-    );
-  }
-  return lines;
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Require our server-issued token
-  const authz =
-    req.headers.authorization || (req.headers["x-client-token"] as string | undefined);
+  // Auth: require server-issued short-lived token
+  const authz = req.headers.authorization || (req.headers["x-client-token"] as string | undefined);
   const token = authz?.startsWith("Bearer ") ? authz.slice(7) : authz;
 
   try {
@@ -41,39 +18,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const { hobby, level, minutes, languageCode } = req.body ?? {};
 
-  // Normalize level so it works regardless of case
+  if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+  if (typeof hobby !== "string" || hobby.trim().length === 0 || hobby.length > 80) {
+    return res.status(400).json({ error: "Invalid hobby" });
+  }
+
+  // Normalize level so client can send "beginner" etc.
   const normalizedLevel =
     typeof level === "string"
       ? level.charAt(0).toUpperCase() + level.slice(1).toLowerCase()
       : "";
 
-  if (!process.env.OPENAI_API_KEY)
-    return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
-  if (
-    typeof hobby !== "string" ||
-    hobby.trim().length === 0 ||
-    hobby.length > 80
-  )
-    return res.status(400).json({ error: "Invalid hobby" });
-  if (!["Beginner", "Intermediate", "Advanced"].includes(normalizedLevel))
+  if (!["Beginner", "Intermediate", "Advanced"].includes(normalizedLevel)) {
     return res.status(400).json({ error: "Invalid level" });
+  }
+
   const weeklyMinutes = Number(minutes);
-  if (
-    !Number.isFinite(weeklyMinutes) ||
-    weeklyMinutes < 15 ||
-    weeklyMinutes > 600
-  )
+  if (!Number.isFinite(weeklyMinutes) || weeklyMinutes < 15 || weeklyMinutes > 600) {
     return res.status(400).json({ error: "Invalid minutes" });
-  if (
-    typeof languageCode !== "string" ||
-    !/^[A-Za-z-]{2,8}$/.test(languageCode)
-  )
+  }
+
+  if (typeof languageCode !== "string" || !/^[A-Za-z-]{2,8}$/.test(languageCode)) {
     return res.status(400).json({ error: "Invalid languageCode" });
+  }
 
   const prompt = `
 You are a concise, motivational coach generating learning plans.
@@ -90,26 +61,30 @@ STRICT OUTPUT FORMAT:
 - Return EXACTLY 52 lines.
 - No numbering. No bullets. No quotes. No headings. No extra commentary.
 - Each line ≤ 300 characters.
-- Do NOT include the text "Week" in the output — the system will add it.
 `.trim();
 
   try {
+    console.info("[/api/generatePlan] calling OpenAI…");
     const response = await client.responses.create({
       model: "gpt-5-mini",
       input: prompt,
       max_output_tokens: 1200,
     });
 
-    const text =
+    const rawText =
       (response as any)?.output_text ??
       (response.output?.[0] as any)?.content?.[0]?.text ??
       (response as any)?.choices?.[0]?.message?.content ??
       "";
 
-    let plan = sanitizeLines(text);
-    plan = plan.map((line, i) => `Week ${i + 1}: ${line}`);
+    // Minimal sanity
+    if (typeof rawText !== "string" || rawText.trim().length === 0) {
+      console.warn("[/api/generatePlan] empty model output");
+      return res.status(200).json({ rawText: "" });
+    }
 
-    return res.status(200).json({ plan });
+    console.info("[/api/generatePlan] ok, returning rawText length:", rawText.length);
+    return res.status(200).json({ rawText });
   } catch (err: any) {
     console.error("[/api/generatePlan] error:", err?.message || err);
     return res.status(500).json({ error: "Provider error" });
