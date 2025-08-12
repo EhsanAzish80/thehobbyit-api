@@ -196,7 +196,22 @@ export async function verifyAppAttest({
 
   const x5c: Buffer[] = att.attStmt.x5c;
   if (!Array.isArray(x5c) || x5c.length === 0) throw new Error("Missing x5c");
-  const chain = x5c.map((b) => new X509Certificate(Buffer.from(b)));
+  console.log("x5c raw:", att.attStmt.x5c);
+  console.log("First cert type:", typeof att.attStmt.x5c[0]);
+  console.log("First cert length:", att.attStmt.x5c[0]?.length);
+  const chain = x5c.map((b) => {
+  let bytes: Uint8Array;
+  if (b instanceof Uint8Array || b instanceof ArrayBuffer) {
+    bytes = new Uint8Array(b);
+  } else if (Buffer.isBuffer(b)) {
+    bytes = b;
+  } else if (typeof b === "string") {
+    bytes = b64toBuf(b);
+  } else {
+    throw new Error("Unsupported cert type in x5c");
+  }
+  return new X509Certificate(Buffer.from(bytes));
+  });
 
   validateChain(chain);
   const leaf = chain[0];
