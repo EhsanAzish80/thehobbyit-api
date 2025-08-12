@@ -36,7 +36,10 @@ function sanitizeLines(text: string): string[] {
   return lines;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -87,13 +90,26 @@ STRICT OUTPUT FORMAT:
       max_output_tokens: 1200
     });
 
-    // New API: response.output_text is the safe, concatenated text
-    const text = response.output_text || "";
+    // Safely get text using new API format
+    let text = response.output_text?.trim() || "";
+
+    // Fallback to first text block if available
+    if (!text && Array.isArray(response.output) && response.output.length > 0) {
+      const firstContent = (response.output[0] as any)?.content;
+      if (Array.isArray(firstContent) && firstContent.length > 0) {
+        text = firstContent.map((c: any) => c.text || "").join("\n").trim();
+      }
+    }
+
+    if (!text) {
+      console.warn("No output text from model:", JSON.stringify(response, null, 2));
+    }
+
     const plan = sanitizeLines(text);
 
     return res.status(200).json({ plan });
   } catch (err: any) {
-    console.error("[/api/generatePlan] error:", err);
+    console.error("[/api/generatePlan] error:", err?.message || err);
     return res.status(500).json({ error: err.message || "Unknown error" });
   }
 }
