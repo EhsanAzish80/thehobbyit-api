@@ -62,26 +62,28 @@ Hobby: ${hobby}
 
   try {
     const response = await client.responses.create({
-      model: "gpt-5-mini",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "WeeklyPlan52",
-          schema: {
-            type: "array",
-            items: { type: "string", minLength: 4, maxLength: 300 },
-            minItems: 52,
-            maxItems: 52,
-          },
-          strict: true,
-        },
+  model: "gpt-5-mini",
+  // Combine system + user into one input string
+  input:
+    `${system}\n\n` +
+    `---\n` +
+    `${user}\n\n` +
+    `Return ONLY a JSON array of 52 strings (no extra text).`,
+  response_format: {
+    type: "json_schema",
+    json_schema: {
+      name: "WeeklyPlan52",
+      schema: {
+        type: "array",
+        items: { type: "string", minLength: 4, maxLength: 300 },
+        minItems: 52,
+        maxItems: 52,
       },
-      max_output_tokens: 1400,
-    });
+      strict: true,
+    },
+  },
+  max_output_tokens: 1400,
+});
 
     const raw = (response as any)?.output_text ?? "";
     let weeks: string[];
