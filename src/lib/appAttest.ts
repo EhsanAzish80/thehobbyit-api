@@ -24,16 +24,19 @@ let subtle: SubtleCrypto;
 function b64toBuf(b64: string): Uint8Array {
   return Uint8Array.from(Buffer.from(b64, "base64"));
 }
+
 function bufToHex(buf: ArrayBuffer | Uint8Array): string {
   const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   return Array.from(u8).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
 function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length);
   out.set(a, 0);
   out.set(b, a.length);
   return out;
 }
+
 function sha256Bytes(data: Uint8Array): Uint8Array {
   return Uint8Array.from(sha256(data));
 }
@@ -47,7 +50,6 @@ function parseAuthData(buf: Uint8Array) {
   const signCount = (buf[off] << 24) | (buf[off + 1] << 16) | (buf[off + 2] << 8) | buf[off + 3];
   off += 4;
 
-  // Attested credential data (AT) present?
   const FLAG_AT = 0x40;
   const hasAT = (flags & FLAG_AT) !== 0;
 
@@ -62,7 +64,6 @@ function parseAuthData(buf: Uint8Array) {
     if (buf.length < off + credIdLen) throw new Error("credId out of range");
     credId = buf.slice(off, off + credIdLen); off += credIdLen;
 
-    // COSE key (CBOR map). Decode once to learn the length, then re-encode to capture exact bytes.
     const remainder = buf.slice(off);
     const decoded = cbor.decodeFirstSync(remainder) as unknown;
     const reencoded = cbor.encode(decoded);
@@ -74,9 +75,8 @@ function parseAuthData(buf: Uint8Array) {
 }
 
 // Apple nonce extension may be OCTETSTRING wrapping another OCTETSTRING.
-// Unwrap one level if needed.
 function unwrapOctetString(bytes: Uint8Array): Uint8Array {
-  if (bytes.length < 2 || bytes[0] !== 0x04) return bytes; // not an OCTET STRING tag
+  if (bytes.length < 2 || bytes[0] !== 0x04) return bytes;
   let len = bytes[1];
   let offset = 2;
   if (len & 0x80) {
@@ -87,27 +87,19 @@ function unwrapOctetString(bytes: Uint8Array): Uint8Array {
     offset = 2 + n;
   }
   const inner = bytes.slice(offset, offset + len);
-  // If inner is itself an OCTET STRING, unwrap once more
   if (inner[0] === 0x04) return unwrapOctetString(inner);
   return inner;
 }
 
-// 1) OID lookup
 function getAppleNonceFromLeaf(leaf: X509Certificate): Uint8Array | null {
-  // OLD: const ext = leaf.extensions.find((e) => e.oid === "1.2.840.113635.100.8.2");
   const ext = leaf.extensions.find((e) => (e as any).type === "1.2.840.113635.100.8.2");
   if (!ext) return null;
-
-  // 2) ext.value is an ArrayBuffer
   const raw = new Uint8Array((ext as any).value as ArrayBuffer);
   return unwrapOctetString(raw);
 }
 
-// Minimal chain validation up to Apple root.
-// NOTE: For production, consider full PKIX path validation and EKU checks.
 function validateChain(chain: X509Certificate[]): void {
   if (chain.length < 2) throw new Error("Certificate chain too short");
-
   const appleRoot = new X509Certificate(APPLE_APP_ATTEST_ROOT_PEM);
 
   for (let i = 0; i < chain.length - 1; i++) {
@@ -126,87 +118,88 @@ function validateChain(chain: X509Certificate[]): void {
   if (!ok) throw new Error("Chain does not validate to Apple root");
 }
 
+// DER → raw (r||s) conversion for ECDSA signatures
+function derToJoseSignature(der: Uint8Array, size = 32): Uint8Array {
+  let offset = 0;
+  if (der[offset++] !== 0x30) throw new Error("Invalid DER");
+  offset++; // skip length
+  if (der[offset++] !== 0x02) throw new Error("Invalid DER");
+  let rLen = der[offset++];
+  let r = der.slice(offset, offset + rLen);
+  offset += rLen;
+  if (der[offset++] !== 0x02) throw new Error("Invalid DER");
+  let sLen = der[offset++];
+  let s = der.slice(offset, offset + sLen);
+
+  if (r.length > size) r = r.slice(r.length - size);
+  if (s.length > size) s = s.slice(s.length - size);
+  if (r.length < size) r = Uint8Array.from([...new Uint8Array(size - r.length), ...r]);
+  if (s.length < size) s = Uint8Array.from([...new Uint8Array(size - s.length), ...s]);
+
+  return Uint8Array.from([...r, ...s]);
+}
+
 export async function verifyAppAttest({
   attestationObjectB64,
   challengeB64,
-  expectedAppId, // "<teamID>.<bundleID>"
+  expectedAppId,
 }: {
   attestationObjectB64: string;
   challengeB64: string;
   expectedAppId: string;
 }): Promise<boolean> {
-  // Decode and parse CBOR attestation object
   const attBuf = b64toBuf(attestationObjectB64);
   const att = cbor.decodeFirstSync(attBuf) as any;
 
-  const fmt: string = att.fmt;
-  const attStmt: any = att.attStmt;
-  const authData: Uint8Array = new Uint8Array(att.authData);
-
-  if (fmt !== "apple-appattest") {
-    throw new Error(`Unexpected fmt: ${fmt}`);
+  if (att.fmt !== "apple-appattest") {
+    throw new Error(`Unexpected fmt: ${att.fmt}`);
   }
 
-  // 1) Parse authenticator data
+  const authData = new Uint8Array(att.authData);
   const auth = parseAuthData(authData);
-
-  // 2) clientDataHash: App Attest uses the raw challenge bytes
   const clientDataHash = sha256Bytes(b64toBuf(challengeB64));
-
-  // 3) Nonce = SHA256(authData || clientDataHash)
   const nonce = sha256Bytes(concatBytes(authData, clientDataHash));
 
-  // 4) x5c chain (leaf first)
-  const x5c: Buffer[] = attStmt.x5c;
+  const x5c: Buffer[] = att.attStmt.x5c;
   if (!Array.isArray(x5c) || x5c.length === 0) throw new Error("Missing x5c");
   const chain = x5c.map((b) => new X509Certificate(Buffer.from(b)));
 
-  // 5) Validate chain to Apple root
   validateChain(chain);
-
   const leaf = chain[0];
 
-  // 6) Verify leaf has nonce extension that matches computed nonce
   const appleNonce = getAppleNonceFromLeaf(leaf);
   if (!appleNonce) throw new Error("Missing Apple nonce extension");
-  if (bufToHex(appleNonce) !== bufToHex(nonce)) {
-    throw new Error("Nonce mismatch");
-  }
+  if (bufToHex(appleNonce) !== bufToHex(nonce)) throw new Error("Nonce mismatch");
 
-  // 7) Verify RP/app binding: SHA256("<teamID>.<bundleID>") == rpIdHash
   const appIdHash = sha256Bytes(new TextEncoder().encode(expectedAppId));
   if (bufToHex(appIdHash) !== bufToHex(auth.rpIdHash)) {
     throw new Error("App ID hash mismatch");
   }
 
-  // 8) Verify attestation signature over (authData || clientDataHash) with leaf public key
-  const sig: Uint8Array = attStmt.sig;
-  if (!sig) throw new Error("Missing attestation signature");
+  const sigDer: Uint8Array = att.attStmt.sig;
+  if (!sigDer) throw new Error("Missing attestation signature");
+  const sigRaw = derToJoseSignature(sigDer);
+
   const verifyData = concatBytes(authData, clientDataHash);
 
- // 3) Export leaf public key with WebCrypto
-  const leafJwk = await subtle.exportKey("jwk", leaf.publicKey as CryptoKey);
+  const jwk = await subtle.exportKey("jwk", leaf.publicKey as CryptoKey);
   const key = await subtle.importKey(
-  "jwk",
-  leafJwk,
-  { name: "ECDSA", namedCurve: "P-256" },
-  false,
-  ["verify"]
-);
+    "jwk",
+    jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["verify"]
+  );
 
-  // NOTE: attStmt.sig for App Attest is DER-encoded ECDSA signature (r,s).
-  // WebCrypto expects raw DER? Most implementations accept DER; if not, you may need DER->raw conversion.
   const ok = await subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     key,
-    sig,
+    sigRaw,
     verifyData
   );
   if (!ok) throw new Error("Invalid attestation signature");
 
-  // 9) Basic sanity: AT flag must be set
-  const FLAG_AT = 0x40;
-  if ((auth.flags & FLAG_AT) === 0) throw new Error("AT flag not set");
+  if ((auth.flags & 0x40) === 0) throw new Error("AT flag not set");
 
   return true;
 }
