@@ -213,7 +213,7 @@ export async function verifyAppAttest({
     throw new Error("App ID hash mismatch");
   }
 
-  const sigDer: Uint8Array = att.attStmt.sig;
+    const sigDer: Uint8Array = att.attStmt.sig;
   if (!sigDer) throw new Error("Missing attestation signature");
   const sigRaw = derToJoseSignature(sigDer); // r||s
 
@@ -225,8 +225,8 @@ export async function verifyAppAttest({
   const ok = await subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     verifyKey,
-    sigRaw,
-    verifyData
+    sigRaw.buffer,       // <- Ensure ArrayBuffer
+    verifyData.buffer    // <- Ensure ArrayBuffer
   );
   if (!ok) throw new Error("Invalid attestation signature");
 
