@@ -107,7 +107,9 @@ function getAppleNonceFromLeaf(leaf: X509Certificate): Uint8Array | null {
 // NOTE: For production, consider full PKIX path validation and EKU checks.
 function validateChain(chain: X509Certificate[]): void {
   if (chain.length < 2) throw new Error("Certificate chain too short");
-  // Verify each cert is signed by the next issuer
+
+  const appleRoot = new X509Certificate(APPLE_APP_ATTEST_ROOT_PEM);
+
   for (let i = 0; i < chain.length - 1; i++) {
     const cert = chain[i];
     const issuer = chain[i + 1];
@@ -115,12 +117,12 @@ function validateChain(chain: X509Certificate[]): void {
       throw new Error(`Chain verification failed at index ${i}`);
     }
   }
-  // Check last against Apple App Attest root
-  const appleRoot = new X509Certificate(APPLE_APP_ATTEST_ROOT_PEM);
+
   const last = chain[chain.length - 1];
   const ok =
     last.verify({ publicKey: appleRoot.publicKey }) ||
-    bufToHex(last.raw) === bufToHex(appleRoot.raw);
+    bufToHex(new Uint8Array(last.rawData)) === bufToHex(new Uint8Array(appleRoot.rawData));
+
   if (!ok) throw new Error("Chain does not validate to Apple root");
 }
 
