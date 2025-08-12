@@ -230,28 +230,14 @@ export async function verifyAppAttest({
       .join(" ")
   );
 
-  // ✅ Always create a clean ArrayBuffer copy
-  const arrBuf: ArrayBuffer = new Uint8Array(bytes).buffer;
-
-  try {
-    const cert = new X509Certificate(arrBuf); // Pass clean ArrayBuffer
-    console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
-    console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
-    return cert;
-  } catch (err: any) {
-    console.error(`[x5c] Cert[${idx}] parse failed:`, err.message || err);
-    throw err;
-  }
-});
-
-  // ✅ Extract plain ArrayBuffer — no Buffer usage
+  // ✅ Always create a clean ArrayBuffer copy in *this scope*
   const arrBuf: ArrayBuffer = bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength
   );
 
   try {
-    const cert = new X509Certificate(arrBuf); // DER as ArrayBuffer
+    const cert = new X509Certificate(arrBuf); // Pass clean ArrayBuffer
     console.info(`[x5c] Cert[${idx}] subject:`, cert.subject);
     console.info(`[x5c] Cert[${idx}] issuer:`, cert.issuer);
     return cert;
