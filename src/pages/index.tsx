@@ -118,9 +118,9 @@ export default function Home() {
           alt="avatar"
           style={{
             position: "absolute",
-            bottom: "50px",
+            bottom: "150px",
             left: `${avatarX % screenWidth}px`,
-            width: "80px",
+            width: "280px",
           }}
         />
       )}
