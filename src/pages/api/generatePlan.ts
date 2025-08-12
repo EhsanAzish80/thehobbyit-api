@@ -22,24 +22,39 @@ function sanitizeLines(text: string): string[] {
   // Remove numbering/bullets
   lines = lines.map(l => l.replace(/^[-*•\d."]+\s*/, "").trim());
 
-  // Enforce exactly 52 lines
-  if (lines.length > 52) {
-    lines = lines.slice(0, 52);
-  } else if (lines.length < 52) {
-    lines = lines.concat(
-      Array(52 - lines.length).fill(
-        "Practice for 20 minutes and review last week."
-      )
-    );
-  }
-
   return lines;
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+// helper: one chunk (e.g., weeks 1–13)
+async function genChunk(
+  client: OpenAI,
+  basePrompt: string,
+  start: number,
+  end: number
+): Promise<string[]> {
+  const chunkPrompt = `${basePrompt}
+
+Generate ONLY weeks ${start} through ${end}.
+Return EXACTLY ${end - start + 1} lines.
+No numbering, no bullets, no quotes.`.trim();
+
+  const resp = await client.responses.create({
+    model: "gpt-5-mini",
+    input: chunkPrompt,
+    max_output_tokens: 900,                 // safe budget
+    reasoning: { effort: "low" },           // minimize reasoning tokens
+    text: { format: { type: "text" } },     // force plain text output
+  });
+
+  const text = (resp.output_text || "").trim();
+  if (!text) {
+    console.warn(`[chunk ${start}-${end}] empty output_text`, JSON.stringify(resp));
+    return [];
+  }
+  return sanitizeLines(text).slice(0, end - start + 1);
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -66,46 +81,38 @@ export default async function handler(
     return res.status(400).json({ error: "Invalid languageCode" });
   }
 
-  const prompt = `
+  try {
+    const basePrompt = `
 You are a concise, motivational coach generating learning plans.
 Target language (BCP-47): ${languageCode}
 Learner level: ${level}
 Time available: ${weeklyMinutes} minutes per week
 Hobby: ${hobby}
 
-Create a progressive 52-week plan.
 Each WEEK must be ONE LINE, with 2–3 short actionable sentences fitting the time budget.
 Include a main focus and an optional bonus. Keep vocabulary simple and upbeat.
 
 STRICT OUTPUT FORMAT:
-- Return EXACTLY 52 lines.
+- One line per week.
 - No numbering. No bullets. No quotes. No headings. No extra commentary.
 - Each line ≤ 300 characters.
 `.trim();
 
-  try {
-    const response = await client.responses.create({
-      model: "gpt-5-mini",
-      input: prompt,
-      max_output_tokens: 1200
-    });
+    // Generate in chunks to avoid token limit issues
+    const c1 = await genChunk(client, basePrompt, 1, 13);
+    const c2 = await genChunk(client, basePrompt, 14, 26);
+    const c3 = await genChunk(client, basePrompt, 27, 39);
+    const c4 = await genChunk(client, basePrompt, 40, 52);
 
-    // Safely get text using new API format
-    let text = response.output_text?.trim() || "";
+    let plan = [...c1, ...c2, ...c3, ...c4].filter(Boolean);
 
-    // Fallback to first text block if available
-    if (!text && Array.isArray(response.output) && response.output.length > 0) {
-      const firstContent = (response.output[0] as any)?.content;
-      if (Array.isArray(firstContent) && firstContent.length > 0) {
-        text = firstContent.map((c: any) => c.text || "").join("\n").trim();
-      }
+    // Ensure exactly 52 lines
+    if (plan.length > 52) plan = plan.slice(0, 52);
+    if (plan.length < 52) {
+      plan = plan.concat(
+        Array(52 - plan.length).fill("Practice for 20 minutes and review last week.")
+      );
     }
-
-    if (!text) {
-      console.warn("No output text from model:", JSON.stringify(response, null, 2));
-    }
-
-    const plan = sanitizeLines(text);
 
     return res.status(200).json({ plan });
   } catch (err: any) {
