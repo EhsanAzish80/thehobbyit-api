@@ -1,13 +1,25 @@
 // src/lib/appAttest.ts
 import * as cbor from "cbor";
 import { sha256 } from "@noble/hashes/sha256";
-// src/lib/appAttest.ts
 import { X509Certificate, cryptoProvider } from "@peculiar/x509";
-import { Crypto } from "@peculiar/webcrypto"; // polyfill WebCrypto in Node
 import { APPLE_APP_ATTEST_ROOT_PEM } from "./appleRoots";
 
-// Point @peculiar/x509 at a WebCrypto engine
-cryptoProvider.set(new Crypto());
+// Wire up WebCrypto for @peculiar/x509 (prefer native, fallback to @peculiar/webcrypto)
+(function initCryptoProvider() {
+  // @ts-expect-error: runtime check
+  const nativeCrypto = (globalThis as any)?.crypto;
+  if (nativeCrypto && typeof nativeCrypto.subtle?.importKey === "function") {
+    // Use the platform WebCrypto if present
+    // Note: cryptoProvider.set accepts a WebCrypto-like object
+    // @ts-expect-error: types differ slightly but runtime compatible
+    cryptoProvider.set(nativeCrypto);
+  } else {
+    // Fallback to @peculiar/webcrypto in Node environments
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Crypto } = require("@peculiar/webcrypto");
+    cryptoProvider.set(new Crypto());
+  }
+})();
 
 // Helpers
 function b64toBuf(b64: string): Uint8Array {
