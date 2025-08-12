@@ -200,23 +200,45 @@ export async function verifyAppAttest({
   console.log("First cert type:", typeof att.attStmt.x5c[0]);
   console.log("First cert length:", att.attStmt.x5c[0]?.length);
   
-  const chain = x5c.map((b: any) => {
+  const chain = x5c.map((b: any, idx: number) => {
   let bytes: Uint8Array;
 
+  // Type detection and conversion
   if (b instanceof Uint8Array) {
+    console.log(`[x5c] Cert[${idx}] type: Uint8Array, length: ${b.length}`);
     bytes = b;
   } else if (b && b.constructor === ArrayBuffer) {
+    console.log(`[x5c] Cert[${idx}] type: ArrayBuffer, length: ${(b as ArrayBuffer).byteLength}`);
     bytes = new Uint8Array(b);
   } else if (Buffer.isBuffer(b)) {
-    bytes = new Uint8Array(b); // ✅ convert Buffer to Uint8Array
+    console.log(`[x5c] Cert[${idx}] type: Buffer, length: ${b.length}`);
+    bytes = new Uint8Array(b);
   } else if (typeof b === "string") {
+    console.log(`[x5c] Cert[${idx}] type: Base64 string, length: ${b.length}`);
     bytes = Uint8Array.from(Buffer.from(b, "base64"));
   } else {
-    throw new Error(`Unsupported cert type in x5c: ${typeof b}`);
+    console.error(`[x5c] Cert[${idx}] Unsupported type: ${typeof b}`, b);
+    throw new Error(`Unsupported cert type in x5c[${idx}]: ${typeof b}`);
   }
 
-  // ✅ Pass ArrayBuffer instead of Buffer
-  return new X509Certificate(bytes.buffer);
+  // Debug: print first few bytes in hex for quick validation
+  const hexPreview = Array.from(bytes.slice(0, 16))
+    .map((n) => n.toString(16).padStart(2, "0"))
+    .join(" ");
+  console.log(`[x5c] Cert[${idx}] first 16 bytes (hex): ${hexPreview}`);
+
+  // ✅ Ensure ArrayBuffer is passed to X509Certificate
+  const arrBuf: ArrayBuffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  );
+
+  try {
+    return new X509Certificate(arrBuf);
+  } catch (err: any) {
+    console.error(`[x5c] Cert[${idx}] failed to parse:`, err.message || err);
+    throw err;
+  }
   });
   
   validateChain(chain);
