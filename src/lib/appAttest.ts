@@ -1,8 +1,9 @@
 // src/lib/appAttest.ts
 import * as cbor from "cbor";
 import { sha256 } from "@noble/hashes/sha256";
-import { X509Certificate, CryptoEngine, setEngine } from "@peculiar/x509";
-import { webcrypto } from "crypto";
+// src/lib/appAttest.ts
+import { X509Certificate, cryptoProvider } from "@peculiar/x509";
+import { Crypto } from "@peculiar/webcrypto"; // polyfill WebCrypto in Node
 import { APPLE_APP_ATTEST_ROOT_PEM } from "./appleRoots";
 
 // Hook Node’s crypto into @peculiar/x509
