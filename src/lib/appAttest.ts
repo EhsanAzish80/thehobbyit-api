@@ -92,12 +92,14 @@ function unwrapOctetString(bytes: Uint8Array): Uint8Array {
   return inner;
 }
 
-// Extract nonce (OID 1.2.840.113635.100.8.2) from leaf cert
+// 1) OID lookup
 function getAppleNonceFromLeaf(leaf: X509Certificate): Uint8Array | null {
-  const ext = leaf.extensions.find((e) => e.oid === "1.2.840.113635.100.8.2");
+  // OLD: const ext = leaf.extensions.find((e) => e.oid === "1.2.840.113635.100.8.2");
+  const ext = leaf.extensions.find((e) => (e as any).type === "1.2.840.113635.100.8.2");
   if (!ext) return null;
-  // peculiar/x509 provides raw DER bytes in ext.value
-  const raw = new Uint8Array(ext.value);
+
+  // 2) ext.value is an ArrayBuffer
+  const raw = new Uint8Array((ext as any).value as ArrayBuffer);
   return unwrapOctetString(raw);
 }
 
@@ -180,15 +182,15 @@ export async function verifyAppAttest({
   if (!sig) throw new Error("Missing attestation signature");
   const verifyData = concatBytes(authData, clientDataHash);
 
-  // leaf.publicKey from peculiar/x509 is a CryptoKey; use the same subtle we wired above
-  const leafJwk = await (leaf.publicKey as CryptoKey).export!({ format: "jwk" } as any);
+ // 3) Export leaf public key with WebCrypto
+  const leafJwk = await subtle.exportKey("jwk", leaf.publicKey as CryptoKey);
   const key = await subtle.importKey(
-    "jwk",
-    leafJwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["verify"]
-  );
+  "jwk",
+  leafJwk,
+  { name: "ECDSA", namedCurve: "P-256" },
+  false,
+  ["verify"]
+);
 
   // NOTE: attStmt.sig for App Attest is DER-encoded ECDSA signature (r,s).
   // WebCrypto expects raw DER? Most implementations accept DER; if not, you may need DER->raw conversion.
