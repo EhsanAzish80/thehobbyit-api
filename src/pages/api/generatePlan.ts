@@ -16,11 +16,7 @@ function sanitizeLines(text: string): string[] {
   return lines.map(l => l.replace(/^[-*•\d."]+\s*/, "").trim());
 }
 
-async function genChunk(
-  basePrompt: string,
-  start: number,
-  end: number
-): Promise<string[]> {
+async function genChunk(basePrompt: string, start: number, end: number): Promise<string[]> {
   const chunkPrompt = `${basePrompt}
 
 Generate ONLY weeks ${start} through ${end}.
@@ -46,7 +42,7 @@ No numbering, no bullets, no quotes.`.trim();
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // AUTH: verify your long-lived device token
+  // Auth: long-lived device token
   try {
     const auth = req.headers.authorization || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
@@ -81,13 +77,12 @@ STRICT OUTPUT FORMAT:
 - Each line ≤ 300 characters.
 `.trim();
 
-    // 4 chunks → reliable completion
     const c1 = await genChunk(basePrompt, 1, 13);
     const c2 = await genChunk(basePrompt, 14, 26);
     const c3 = await genChunk(basePrompt, 27, 39);
     const c4 = await genChunk(basePrompt, 40, 52);
-    let plan = [...c1, ...c2, ...c3, ...c4].filter(Boolean);
 
+    let plan = [...c1, ...c2, ...c3, ...c4].filter(Boolean);
     if (plan.length > 52) plan = plan.slice(0, 52);
     if (plan.length < 52) {
       plan = plan.concat(Array(52 - plan.length).fill("Practice for 20 minutes and review last week."));
