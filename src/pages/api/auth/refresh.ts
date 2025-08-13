@@ -14,7 +14,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const payload = await verifyToken(token, "generatePlan");
 
-    // Reissue with a fresh window (keep same sub/deviceId)
     const newToken = await signToken({
       aud: "generatePlan",
       sub: payload.sub,
