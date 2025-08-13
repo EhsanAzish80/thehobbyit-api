@@ -30,6 +30,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const appleSub = String(payload.sub || "");
     if (!appleSub) return res.status(400).json({ error: "Invalid Apple token (no sub)" });
 
+    // src/pages/api/auth/apple.ts — before signToken(...)
+    if (!process.env.INTERNAL_API_SECRET || process.env.INTERNAL_API_SECRET!.length < 16) {
+      console.error("INTERNAL_API_SECRET not set or too short");
+      return res.status(500).json({ error: "Server misconfig: INTERNAL_API_SECRET missing" });
+    }
+
     const token = await signToken({
       aud: "generatePlan",
       sub: appleSub,
