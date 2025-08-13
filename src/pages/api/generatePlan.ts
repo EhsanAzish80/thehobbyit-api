@@ -61,34 +61,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (typeof languageCode !== "string" || !/^[A-Za-z-]{2,8}$/.test(languageCode)) return res.status(400).json({ error: "Invalid languageCode" });
 
   try {
+    // 1️⃣ Determine the target week number
+    let targetWeek = 1;
+    // TODO: Replace this with your own DB/SwiftData query
+    // Example:
+    // const lastStep = await db.getLastStepForHobby(hobby);
+    // if (lastStep) targetWeek = lastStep.week + 1;
+
     const basePrompt = `
-You are a concise, motivational coach generating learning plans.
+You are a concise, motivational coach generating a learning plan for one specific week.
 Target language (BCP-47): ${languageCode}
 Learner level: ${level}
 Time available: ${weeklyMinutes} minutes per week
 Hobby: ${hobby}
 
-Each WEEK must be ONE LINE, with 2–3 short actionable sentences fitting the time budget.
+Generate ONLY week ${targetWeek} in ONE LINE with 2–3 short actionable sentences fitting the time budget.
 Include a main focus and an optional bonus. Keep vocabulary simple and upbeat.
 
 STRICT OUTPUT FORMAT:
-- One line per week.
-- No numbering. No bullets. No quotes. No headings. No extra commentary.
-- Each line ≤ 300 characters.
+- Exactly one line.
+- No numbering, bullets, quotes, or headings.
+- ≤ 300 characters.
 `.trim();
 
-    const c1 = await genChunk(basePrompt, 1, 13);
-    const c2 = await genChunk(basePrompt, 14, 26);
-    const c3 = await genChunk(basePrompt, 27, 39);
-    const c4 = await genChunk(basePrompt, 40, 52);
+    // 2️⃣ Ask the model for only the requested week
+    const result = await genChunk(basePrompt, targetWeek, targetWeek);
+    const weekText = (result && result[0]) || "Practice for 20 minutes and review last week.";
 
-    let plan = [...c1, ...c2, ...c3, ...c4].filter(Boolean);
-    if (plan.length > 52) plan = plan.slice(0, 52);
-    if (plan.length < 52) {
-      plan = plan.concat(Array(52 - plan.length).fill("Practice for 20 minutes and review last week."));
-    }
-
-    return res.status(200).json({ plan });
+    // 3️⃣ Return it
+    return res.status(200).json({ week: targetWeek, text: weekText });
   } catch (err: any) {
     console.error("[/api/generatePlan] error:", err?.message || err);
     return res.status(500).json({ error: err.message || "Unknown error" });
