@@ -75,7 +75,7 @@ Learner level: ${level}
 Time available: ${weeklyMinutes} minutes per week
 Hobby: ${hobby}
 
-Generate ONLY week ${targetWeek} in ONE LINE with 2–3 short actionable sentences fitting the time budget.
+Generate ONLY week ${targetWeek} in ONE LINE with 5–7 short actionable sentences fitting the time budget.
 Include a main focus and an optional bonus. Keep vocabulary simple and upbeat.
 
 STRICT OUTPUT FORMAT:
