@@ -1,89 +1,63 @@
 import Head from "next/head";
 
-export default function SupportPage() {
-  const year = new Date().getFullYear();
+export default function PrivacyPage() {
+  const updated = new Date().toLocaleDateString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
+  });
 
   return (
     <>
       <Head>
-        <title>Support · HobbyIt</title>
-        <meta name="description" content="Get help with HobbyIt. FAQs, contact, and troubleshooting." />
+        <title>Privacy Policy · HobbyIt</title>
+        <meta name="description" content="HobbyIt privacy policy and Health data practices." />
       </Head>
 
       <main className="wrap">
         <header className="hero">
-          <div className="badge">Support</div>
-          <h1>We’re here to help</h1>
+          <div className="badge">Privacy</div>
+          <h1>Your data. Your choice.</h1>
           <p className="lead">
-            Questions about tracking, Health data, or tips? Find answers below or reach us directly.
+            HobbyIt is designed to respect your privacy. You control what’s shared, and you can
+            revoke access at any time.
           </p>
+          <p className="muted">Last updated: {updated}</p>
         </header>
 
-        <section className="card">
-          <h2>Quick answers</h2>
-          <ul className="faq">
-            <li>
-              <h3>Does HobbyIt use my Health data?</h3>
-              <p>
-                Only with your permission. You choose what to share. Data stays on your device unless
-                you explicitly share it via the Health app.
-              </p>
-            </li>
-            <li>
-              <h3>Why don’t I see my workouts/sleep?</h3>
-              <p>
-                Open iOS Settings → Privacy &amp; Security → Health → Data Access &amp; Devices →
-                <strong> HobbyIt</strong>. Ensure the categories you want are enabled. Then reopen the app.
-              </p>
-            </li>
-            <li>
-              <h3>How do reminders work?</h3>
-              <p>
-                Reminders are local notifications. You can enable/disable them per hobby and adjust timing
-                in app. If you’re not receiving alerts, check iOS Settings → Notifications → HobbyIt.
-              </p>
-            </li>
-            <li>
-              <h3>Meal suggestions seem off—what can I do?</h3>
-              <p>
-                Try adding preferred ingredients, setting your dietary style, and adjusting targets.
-                Suggestions adapt to your inputs over time.
-              </p>
-            </li>
+        <article className="card prose">
+          <h2>Health data (Apple Health)</h2>
+          <p>
+            HobbyIt can read workouts, sleep, weight, water, and nutrition, and can write the entries
+            you log in the app back to Health—<strong>only</strong> after you grant permission.
+          </p>
+          <ul>
+            <li>Permissions are granular and optional.</li>
+            <li>You can change permissions in iOS Settings → Privacy &amp; Security → Health.</li>
+            <li>We never sell or share your Health data.</li>
           </ul>
-        </section>
 
-        <section className="grid">
-          <div className="card">
-            <h2>Contact</h2>
-            <p>
-              Email us anytime:{" "}
-              <a href="mailto:support@thehobbyit.com">support@thehobbyit.com</a>
-            </p>
-            <p>
-              We typically reply within 1–2 business days. Please include device model and iOS version if
-              reporting a bug.
-            </p>
-          </div>
+          <h2>On-device intelligence</h2>
+          <p>
+            When available on your device, Apple Intelligence and on-device models may help summarize
+            weekly stats or suggest meals. These features run locally when possible.
+          </p>
 
-          <div className="card">
-            <h2>Status &amp; Updates</h2>
-            <p>
-              Follow release notes and tips on X:{" "}
-              <a href="https://x.com/thehobbyit" target="_blank" rel="noreferrer">
-                @thehobbyit
-              </a>
-            </p>
-            <p>
-              Feature requests or feedback? We’d love to hear from you.
-            </p>
-          </div>
-        </section>
+          <h2>Analytics &amp; logging</h2>
+          <p>
+            We may collect basic, non-identifying diagnostics (e.g., crashes, anonymized performance)
+            to improve app stability. No advertising SDKs.
+          </p>
+
+          <h2>Contact</h2>
+          <p>
+            For privacy questions or data requests, email{" "}
+            <a href="mailto:privacy@thehobbyit.com">privacy@thehobbyit.com</a>.
+          </p>
+        </article>
 
         <footer className="foot">
-          <p>© {year} HobbyIt. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} HobbyIt. All rights reserved.</p>
           <nav>
-            <a href="/privacy">Privacy</a>
+            <a href="/support">Support</a>
           </nav>
         </footer>
       </main>
@@ -113,7 +87,7 @@ export default function SupportPage() {
           border: 1px solid rgba(148, 163, 184, 0.2);
           font-size: 12px;
           letter-spacing: 0.04em;
-          color: #c7d2fe;
+          color: #c7f0ff;
           margin-bottom: 10px;
         }
         h1 {
@@ -122,36 +96,24 @@ export default function SupportPage() {
           line-height: 1.1;
         }
         .lead {
-          max-width: 680px;
+          max-width: 760px;
           margin: 0 auto;
           color: #b6c2ce;
         }
+        .muted { color: #9fb0bd; margin-top: 8px; }
         .card {
           max-width: 920px;
           margin: 16px auto;
-          padding: 20px 22px;
+          padding: 22px 24px;
           background: rgba(17, 24, 39, 0.6);
           border: 1px solid rgba(148, 163, 184, 0.18);
           border-radius: 16px;
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
         }
-        .grid {
-          max-width: 920px;
-          margin: 16px auto;
-          display: grid;
-          gap: 16px;
-          grid-template-columns: 1fr;
-        }
-        @media (min-width: 840px) {
-          .grid { grid-template-columns: 1fr 1fr; }
-        }
-        h2 { margin: 4px 0 12px; font-size: 18px; }
-        .faq { list-style: none; padding: 0; margin: 0; }
-        .faq li { padding: 12px 0; border-top: 1px dashed rgba(148, 163, 184, 0.25); }
-        .faq li:first-child { border-top: none; }
-        h3 { margin: 0 0 6px; font-size: 16px; }
-        p { margin: 0; color: #cbd5e1; }
-        a { color: #86c5ff; text-decoration: underline; }
+        .prose h2 { margin: 8px 0 8px; font-size: 18px; }
+        .prose p { color: #cbd5e1; }
+        .prose ul { margin: 8px 0 0 18px; color: #cbd5e1; }
+        a { color: #86c5ff; }
         .foot {
           max-width: 920px;
           margin: 24px auto 0;
